@@ -1,11 +1,11 @@
-package com.github.hsz.stickyprojectview
+package info.chrzanowski.stickyprojectview
 
 import com.intellij.DynamicBundle
 import org.jetbrains.annotations.NonNls
 import org.jetbrains.annotations.PropertyKey
 
 @NonNls
-private const val BUNDLE = "messages.MyBundle"
+private const val BUNDLE = "messages.StickyProjectViewBundle"
 
 object MyBundle : DynamicBundle(BUNDLE) {
 
