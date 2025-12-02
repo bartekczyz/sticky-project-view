@@ -32,28 +32,65 @@ class VisualStickyTreeItems(private val tree: JTree) {
             return
         }
 
-        // Find the row at the effective viewport top (accounting for sticky items we'll add)
-        var topRow = -1
-        for (row in 0 until tree.rowCount) {
-            val rowBounds = tree.getRowBounds(row)
-            if (rowBounds != null) {
-                val rowBottom = rowBounds.y
-                // This row's bottom is below the viewport top
-                if (rowBottom > visibleRect.y) {
-                    topRow = row
-                    break
-                }
-            }
-        }
-
-        if (topRow < 0) {
+        // Find the first visible row (one that's at least partially visible)
+        val firstVisibleRow = tree.getClosestRowForLocation(0, visibleRect.y)
+        if (firstVisibleRow < 0) {
             return
         }
 
-        val topPath = tree.getPathForRow(topRow) ?: return
+        val firstVisiblePath = tree.getPathForRow(firstVisibleRow) ?: return
 
-        // Collect the chain of expanded nodes that should be sticky
-        collectExpandedChain(topPath, topRow, visibleRect.y, rowHeight)
+        // Build ancestor chain from root to first visible row
+        val ancestors = mutableListOf<TreePath>()
+        var currentPath: TreePath? = firstVisiblePath
+        while (currentPath != null) {
+            ancestors.add(0, currentPath)
+            currentPath = currentPath.parentPath
+        }
+
+        // The effective viewport top grows as we add sticky items
+        var effectiveViewportTop = visibleRect.y
+
+        // Process each ancestor to see if it should be sticky
+        for (path in ancestors) {
+            val row = tree.getRowForPath(path)
+            if (row < 0) continue
+
+            val rowBounds = tree.getRowBounds(row) ?: continue
+            val rowTop = rowBounds.y
+            val rowBottom = rowTop + rowBounds.height
+            val depth = path.pathCount - 1
+            val isRoot = depth == 0
+
+            // Determine if this row should be sticky
+            val shouldBeSticky = if (isRoot) {
+                // Root sticks as soon as any scrolling happens
+                rowTop < visibleRect.y
+            } else {
+                // Non-root items stick when their bottom is at or above the effective viewport top
+                rowBottom <= effectiveViewportTop
+            }
+
+            if (shouldBeSticky) {
+                // Must be expanded and have children
+                if (tree.isExpanded(path)) {
+                    val model = tree.model
+                    val node = path.lastPathComponent
+                    if (!model.isLeaf(node)) {
+                        val item = StickyTreeItem(
+                            treePath = path,
+                            row = row,
+                            depth = depth,
+                            isRoot = isRoot
+                        )
+                        stickyItems.add(item)
+
+                        // Move effective viewport down to account for this sticky item
+                        effectiveViewportTop += rowHeight
+                    }
+                }
+            }
+        }
 
         if (stickyItems.isNotEmpty()) {
             totalHeight = stickyItems.size * rowHeight
@@ -81,60 +118,5 @@ class VisualStickyTreeItems(private val tree: JTree) {
         stickyItems.clear()
         totalHeight = 0
         offsetY = 0
-    }
-    
-    /**
-     * Collects the chain of expanded nodes from root down to the deepest one
-     * that has children visible in or below the viewport
-     */
-    private fun collectExpandedChain(topPath: TreePath, topRow: Int, scrollY: Int, rowHeight: Int) {
-        // Build list of ancestors from root to topPath
-        val ancestors = mutableListOf<TreePath>()
-        var currentPath: TreePath? = topPath
-        while (currentPath != null) {
-            ancestors.add(0, currentPath)
-            currentPath = currentPath.parentPath
-        }
-
-        // The effective viewport top starts at scrollY and moves down as we add sticky items
-        // This represents where the actual visible content starts (after accounting for STP)
-        var effectiveViewportTop = scrollY
-
-        for (i in ancestors.indices) {
-            val path = ancestors[i]
-            val row = tree.getRowForPath(path)
-            if (row < 0) continue
-
-            val rowBounds = tree.getRowBounds(row) ?: continue
-            val rowTop = rowBounds.y
-
-            // Check if this row should be sticky:
-            // 1. It must be at or before topRow (ancestor or the top row itself)
-            // 2. Any part of it must be scrolled out: row top is above the effective viewport top
-            val isAncestor = row <= topRow
-            val isScrolledOut = rowTop < effectiveViewportTop
-
-            if (isAncestor && isScrolledOut) {
-                // Must be expanded
-                if (tree.isExpanded(path)) {
-                    // Must have children (not a leaf)
-                    val model = tree.model
-                    val node = path.lastPathComponent
-                    if (!model.isLeaf(node)) {
-                        val item = StickyTreeItem(
-                            treePath = path,
-                            row = row,
-                            depth = path.pathCount - 1,
-                            isRoot = path.pathCount == 1
-                        )
-                        stickyItems.add(item)
-
-                        // Move the effective viewport top down by this item's height
-                        // This simulates the sticky panel covering the viewport
-                        effectiveViewportTop += rowHeight
-                    }
-                }
-            }
-        }
     }
 }
