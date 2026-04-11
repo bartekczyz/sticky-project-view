@@ -3,13 +3,20 @@ package info.chrzanowski.stickyprojectview
 
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.util.Disposer
+import java.awt.event.FocusEvent
+import java.awt.event.FocusListener
+import java.beans.PropertyChangeEvent
+import java.beans.PropertyChangeListener
 import java.awt.Rectangle
-import java.awt.event.AdjustmentEvent
-import java.awt.event.AdjustmentListener
 import javax.swing.JScrollPane
 import javax.swing.JTree
+import javax.swing.event.ChangeListener
 import javax.swing.event.TreeExpansionEvent
 import javax.swing.event.TreeExpansionListener
+import javax.swing.event.TreeModelEvent
+import javax.swing.event.TreeModelListener
+import javax.swing.event.TreeSelectionListener
+import javax.swing.tree.TreeModel
 
 /**
  * Manages the sticky tree items behavior by coordinating between the tree,
@@ -22,57 +29,126 @@ class StickyTreeManager(
     private val visualStickyItems: VisualStickyTreeItems,
     private val stickyPanel: StickyTreePanel,
     parentDisposable: Disposable
-) : AdjustmentListener, TreeExpansionListener, Disposable {
-    
+) : TreeExpansionListener, Disposable {
+
     private var lastVisibleRect: Rectangle = Rectangle()
-    
+    private var observedModel: TreeModel = tree.model
+    private val viewportChangeListener = ChangeListener { recalculateAndRepaint(reason = "viewport") }
+    private val treeSelectionListener = TreeSelectionListener { repaintPanel("selection") }
+    private val focusListener = object : FocusListener {
+        override fun focusGained(event: FocusEvent?) {
+            repaintPanel("focusGained")
+        }
+
+        override fun focusLost(event: FocusEvent?) {
+            repaintPanel("focusLost")
+        }
+    }
+    private val treeModelListener = object : TreeModelListener {
+        override fun treeNodesChanged(event: TreeModelEvent) = recalculateAndRepaint(forceRecalculate = true, reason = "treeNodesChanged")
+
+        override fun treeNodesInserted(event: TreeModelEvent) = recalculateAndRepaint(forceRecalculate = true, reason = "treeNodesInserted")
+
+        override fun treeNodesRemoved(event: TreeModelEvent) = recalculateAndRepaint(forceRecalculate = true, reason = "treeNodesRemoved")
+
+        override fun treeStructureChanged(event: TreeModelEvent) = recalculateAndRepaint(forceRecalculate = true, reason = "treeStructureChanged")
+    }
+    private val propertyChangeListener = PropertyChangeListener(::handlePropertyChange)
+
     init {
         Disposer.register(parentDisposable, this)
-        
-        // Listen to scroll events
-        scrollPane.verticalScrollBar.addAdjustmentListener(this)
-        
-        // Listen to tree expansion/collapse events
+
+        scrollPane.viewport.addChangeListener(viewportChangeListener)
         tree.addTreeExpansionListener(this)
+        tree.addTreeSelectionListener(treeSelectionListener)
+        tree.addFocusListener(focusListener)
+        tree.addPropertyChangeListener(propertyChangeListener)
+        observedModel.addTreeModelListener(treeModelListener)
     }
-    
-    override fun adjustmentValueChanged(e: AdjustmentEvent) {
-        // Update on every scroll event, not just when adjustment is done
-        recalculateAndRepaint()
-    }
-    
+
     override fun treeExpanded(event: TreeExpansionEvent) {
-        recalculateAndRepaint()
+        recalculateAndRepaint(forceRecalculate = true, reason = "treeExpanded")
     }
-    
+
     override fun treeCollapsed(event: TreeExpansionEvent) {
-        recalculateAndRepaint()
+        recalculateAndRepaint(forceRecalculate = true, reason = "treeCollapsed")
     }
-    
+
     /**
      * Recalculates sticky items and repaints the panel
      */
-    fun recalculateAndRepaint() {
-        val visibleRect = tree.visibleRect
-        
-        // Only recalculate if the visible area has changed
-        if (visibleRect != lastVisibleRect) {
+    fun recalculateAndRepaint(forceRecalculate: Boolean = false, reason: String = "unspecified") {
+        val visibleRect = currentViewportRect()
+        val didRecalculate = forceRecalculate || visibleRect != lastVisibleRect
+
+        if (didRecalculate) {
             lastVisibleRect = Rectangle(visibleRect)
             visualStickyItems.recalculate(visibleRect)
-            stickyPanel.repaintStickyItems()
         }
+        stickyPanel.repaintStickyItems()
+        StickyTreeDebugLogger.logManagerEvent(
+            tree = tree,
+            reason = reason,
+            forceRecalculate = forceRecalculate,
+            didRecalculate = didRecalculate,
+            visibleRect = visibleRect,
+            panelHeight = visualStickyItems.height(),
+            stickyItems = visualStickyItems.items()
+        )
     }
-    
+
+    private fun currentViewportRect(): Rectangle {
+        val rect = tree.visibleRect
+        return Rectangle(rect)
+    }
+
     /**
      * Forces a recalculation and repaint
      */
     fun forceUpdate() {
         lastVisibleRect = Rectangle()
-        recalculateAndRepaint()
+        recalculateAndRepaint(forceRecalculate = true, reason = "forceUpdate")
     }
-    
+
+    private fun handlePropertyChange(event: PropertyChangeEvent) {
+        when (event.propertyName) {
+            "model" -> {
+                (event.oldValue as? TreeModel)?.removeTreeModelListener(treeModelListener)
+                val newModel = (event.newValue as? TreeModel) ?: (tree.model as TreeModel?)
+                if (newModel == null) {
+                    visualStickyItems.clear()
+                    stickyPanel.repaintStickyItems()
+                    return
+                }
+                observedModel = newModel
+                observedModel.addTreeModelListener(treeModelListener)
+                recalculateAndRepaint(forceRecalculate = true, reason = "modelChanged")
+            }
+
+            "rowHeight" -> recalculateAndRepaint(forceRecalculate = true, reason = "rowHeightChanged")
+            "cellRenderer", "font" -> repaintPanel(event.propertyName)
+        }
+    }
+
+    private fun repaintPanel(reason: String) {
+        stickyPanel.repaintStickyItems()
+        StickyTreeDebugLogger.logManagerEvent(
+            tree = tree,
+            reason = "repaint:$reason",
+            forceRecalculate = false,
+            didRecalculate = false,
+            visibleRect = currentViewportRect(),
+            panelHeight = visualStickyItems.height(),
+            stickyItems = visualStickyItems.items()
+        )
+    }
+
     override fun dispose() {
-        scrollPane.verticalScrollBar.removeAdjustmentListener(this)
+        scrollPane.viewport.removeChangeListener(viewportChangeListener)
         tree.removeTreeExpansionListener(this)
+        tree.removeTreeSelectionListener(treeSelectionListener)
+        tree.removeFocusListener(focusListener)
+        tree.removePropertyChangeListener(propertyChangeListener)
+        observedModel.removeTreeModelListener(treeModelListener)
     }
 }

@@ -2,9 +2,11 @@
 package info.chrzanowski.stickyprojectview
 
 import com.intellij.ui.components.JBPanel
-import java.awt.Component
+import java.awt.Dimension
 import java.awt.Graphics
 import javax.swing.JTree
+import javax.swing.JViewport
+import javax.swing.SwingUtilities
 
 /**
  * Panel that displays sticky tree items at the top of the tree viewport.
@@ -14,13 +16,11 @@ class StickyTreePanel(
     private val tree: JTree,
     private val visualStickyItems: VisualStickyTreeItems
 ) : JBPanel<StickyTreePanel>() {
+    private var panelWidth: Int = 0
+    private var panelHeight: Int = 0
 
-    private data class RenderedItem(val component: Component, val yPosition: Int, val height: Int)
-
-    private val renderedComponents = mutableListOf<RenderedItem>()
-    
     init {
-        layout = null // Use absolute positioning
+        layout = null
         isOpaque = true
         background = tree.background
     }
@@ -30,105 +30,73 @@ class StickyTreePanel(
      */
     fun repaintStickyItems() {
         val items = visualStickyItems.items()
+        val nextWidth = currentViewportWidth()
+        val nextHeight = if (items.isEmpty()) 0 else visualStickyItems.height()
+        val sizeChanged = nextWidth != panelWidth || nextHeight != panelHeight
 
-        if (items.isEmpty()) {
-            isVisible = false
-            setSize(0, 0)
-            revalidate()
-            repaint()
-            return
-        }
-
-        val rowHeight = tree.rowHeight.coerceAtLeast(20)
-        val panelWidth = tree.width
-        val panelHeight = visualStickyItems.height()
-
-        renderedComponents.clear()
-        items.forEachIndexed { index, _ ->
-            val yPosition = index * rowHeight
-            renderedComponents.add(RenderedItem(tree, yPosition, rowHeight))
-        }
-
+        panelWidth = nextWidth
+        panelHeight = nextHeight
+        isVisible = nextHeight > 0
         setSize(panelWidth, panelHeight)
-        isVisible = true
-        revalidate()
+
+        if (sizeChanged) {
+            revalidate()
+        }
         repaint()
     }
-    
-    /**
-     * Renders a tree node component for the sticky item
-     */
-    private fun renderTreeNode(item: StickyTreeItem): Component? {
-        val renderer = tree.cellRenderer ?: return null
-        val lastPathComponent = item.treePath.lastPathComponent
 
-        // Use the actual row number to preserve tree indentation
-        return renderer.getTreeCellRendererComponent(
-            tree,
-            lastPathComponent,
-            false,
-            tree.isExpanded(item.treePath),
-            tree.model.isLeaf(lastPathComponent),
-            item.row,
-            false
-        )
-    }
-    
     override fun paintComponent(g: Graphics) {
         super.paintComponent(g)
 
         val items = visualStickyItems.items()
+        if (items.isEmpty() || width <= 0 || height <= 0) {
+            return
+        }
 
-        renderedComponents.forEachIndexed { index, renderedItem ->
-            if (index >= items.size) return@forEachIndexed
+        g.color = tree.background
+        g.fillRect(0, 0, width, height)
 
+        val defaultRowHeight = tree.rowHeight.coerceAtLeast(1)
+        val placements = mutableListOf<String>()
+        for (index in items.indices.reversed()) {
             val stickyItem = items[index]
-            val component = renderTreeNode(stickyItem) ?: return@forEachIndexed
+            val rowBounds = tree.getRowBounds(stickyItem.row)
+            val rowHeight = rowBounds?.height?.coerceAtLeast(defaultRowHeight) ?: defaultRowHeight
+            val yLocation = stickyItem.yLocation
+            val visibleTop = maxOf(yLocation, 0)
+            val visibleBottom = minOf(yLocation + rowHeight, height)
+            if (rowBounds == null || visibleTop >= visibleBottom) {
+                placements += "${StickyTreeDebugLogger.pathText(stickyItem.treePath)} skipped rowBounds=${StickyTreeDebugLogger.rect(rowBounds)} visibleTop=$visibleTop visibleBottom=$visibleBottom"
+                continue
+            }
+            if (width <= 0 || rowHeight <= 0 || rowBounds.x >= width) {
+                placements += "${StickyTreeDebugLogger.pathText(stickyItem.treePath)} skipped width=$width rowHeight=$rowHeight rowBounds=${StickyTreeDebugLogger.rect(rowBounds)}"
+                continue
+            }
 
-            // Calculate indentation based on depth
-            // IntelliJ trees typically use depth * indent per level
-            val indent = stickyItem.depth * getIndentPerLevel()
+            if (width <= 0) {
+                placements += "${StickyTreeDebugLogger.pathText(stickyItem.treePath)} skipped paintWidth=$width"
+                continue
+            }
 
-            component.setBounds(0, 0, width - indent, renderedItem.height)
-            component.setSize(width - indent, renderedItem.height)
-
-            val graphics = g.create() as Graphics
-            graphics.translate(indent, renderedItem.yPosition)
-            graphics.clipRect(0, 0, width - indent, renderedItem.height)
-            component.paint(graphics)
-            graphics.dispose()
-        }
-
-        if (renderedComponents.isNotEmpty()) {
-            val oldColor = g.color
-            g.color = tree.background.darker()
-            g.drawLine(0, height - 1, width, height - 1)
-            g.color = oldColor
-        }
-    }
-
-    /**
-     * Gets the indent per level from the tree UI, including space for expand/collapse icon
-     */
-    private fun getIndentPerLevel(): Int {
-        // Try to get the indent from the tree UI
-        val ui = tree.ui
-        if (ui is javax.swing.plaf.basic.BasicTreeUI) {
-            return try {
-                val field = javax.swing.plaf.basic.BasicTreeUI::class.java.getDeclaredField("leftChildIndent")
-                field.isAccessible = true
-                val leftIndent = field.getInt(ui)
-
-                val rightField = javax.swing.plaf.basic.BasicTreeUI::class.java.getDeclaredField("rightChildIndent")
-                rightField.isAccessible = true
-                val rightIndent = rightField.getInt(ui)
-
-                // Add space for the expand/collapse icon
-                leftIndent + rightIndent + 6
-            } catch (e: Exception) {
-                26 // Default fallback (20 for indent + 6 for icon)
+            placements += "${StickyTreeDebugLogger.pathText(stickyItem.treePath)} row=${stickyItem.row} y=$yLocation visibleTop=$visibleTop visibleBottom=$visibleBottom rowBounds=${StickyTreeDebugLogger.rect(rowBounds)} paintWidth=$width"
+            val rowGraphics = g.create(0, visibleTop, width, visibleBottom - visibleTop)
+            try {
+                rowGraphics.color = tree.background
+                rowGraphics.fillRect(0, 0, width, visibleBottom - visibleTop)
+                rowGraphics.translate(0, yLocation - visibleTop - rowBounds.y)
+                tree.paint(rowGraphics)
+            } finally {
+                rowGraphics.dispose()
             }
         }
-        return 26 // Default fallback (20 for indent + 6 for icon)
+        StickyTreeDebugLogger.logPaint(tree, width, height, items, placements)
+    }
+
+    override fun getPreferredSize(): Dimension = Dimension(panelWidth, panelHeight)
+
+    private fun currentViewportWidth(): Int {
+        val viewport = SwingUtilities.getAncestorOfClass(JViewport::class.java, tree) as? JViewport
+        return viewport?.extentSize?.width ?: tree.visibleRect.width
     }
 }

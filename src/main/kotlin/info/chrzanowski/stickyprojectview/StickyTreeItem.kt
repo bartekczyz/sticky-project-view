@@ -12,23 +12,18 @@ data class StickyTreeItem(
      * The tree path identifying this node in the tree hierarchy
      */
     val treePath: TreePath,
-    
+
     /**
      * The vertical position (row index) of this item in the tree
      */
     val row: Int,
-    
+
     /**
-     * The depth level in the tree (0 for root, 1 for children, etc.)
+     * The vertical position of this item inside the sticky panel.
      */
-    val depth: Int,
-    
-    /**
-     * Whether this is the root item
-     */
-    val isRoot: Boolean = depth == 0
+    val yLocation: Int
 ) : Comparable<StickyTreeItem> {
-    
+
     override fun compareTo(other: StickyTreeItem): Int {
         return row.compareTo(other.row)
     }
