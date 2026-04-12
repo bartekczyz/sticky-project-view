@@ -103,49 +103,25 @@ class VisualStickyTreeItems(private val tree: JTree) {
     /**
      * Returns the list of sticky items with their Y positions calculated
      */
-    fun items(): List<StickyTreeItem> {
-        return stickyItems
-    }
+    fun items(): List<StickyTreeItem> = stickyItems
 
-    /**
-     * Returns the total height of all sticky items
-     */
-    fun height(): Int {
-        return totalHeight
-    }
+    fun height(): Int = totalHeight
 
-    /**
-     * Clears all sticky items
-     */
     fun clear() {
         stickyItems.clear()
         totalHeight = 0
     }
 
-    private fun isVisiblePath(path: TreePath): Boolean {
-        return tree.getRowForPath(path) >= 0
-    }
+    private fun isVisiblePath(path: TreePath) = tree.getRowForPath(path) >= 0
 
-    private fun pathToRoot(path: TreePath): List<TreePath> {
-        val result = mutableListOf<TreePath>()
-        var current: TreePath? = path
-        while (current != null) {
-            result.add(0, current)
-            current = current.parentPath
-        }
-        return result
-    }
+    private fun pathToRoot(path: TreePath): List<TreePath> = generateSequence(path) { it.parentPath }.toList().asReversed()
 
-    private fun isStickyCandidate(path: TreePath): Boolean {
-        val node = path.lastPathComponent
-        return tree.isExpanded(path) && !tree.model.isLeaf(node)
-    }
+    private fun isStickyCandidate(path: TreePath) = tree.isExpanded(path) && !tree.model.isLeaf(path.lastPathComponent)
 
-    private fun subtreeBottom(path: TreePath): Int? {
-        val lastRow = lastVisibleSubtreeRow(path) ?: return null
-        val rowBounds = tree.getRowBounds(lastRow) ?: return null
-        return rowBounds.y + rowBounds.height
-    }
+    private fun subtreeBottom(path: TreePath) =
+        lastVisibleSubtreeRow(path)
+            ?.let(tree::getRowBounds)
+            ?.let { it.y + it.height }
 
     private fun lastVisibleSubtreeRow(path: TreePath): Int? {
         val row = tree.getRowForPath(path)
@@ -205,7 +181,6 @@ class VisualStickyTreeItems(private val tree: JTree) {
         return if (fallback >= 0) fallback else rowCount - 1
     }
 
-    private fun isPanelTooBig(itemHeight: Int, panelHeight: Int, viewportHeight: Int): Boolean {
-        return panelHeight + 2 * itemHeight > viewportHeight / 2
-    }
+    private fun isPanelTooBig(itemHeight: Int, panelHeight: Int, viewportHeight: Int) =
+        panelHeight + 2 * itemHeight > viewportHeight / 2
 }

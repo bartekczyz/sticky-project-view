@@ -35,42 +35,25 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
     }
 
     fun initialize() {
-        StickyTreeDebugLogger.logAttachment(currentPane()?.tree ?: return, "initialize")
-        attachToPane(currentPane())
-    }
-
-    fun isAttached(): Boolean {
-        return onEdt { currentAttachment() != null }
-    }
-
-    fun stickyItemLabels(): List<String> {
-        return onEdt {
-            currentAttachment()?.visualStickyItems?.items().orEmpty().map { it.treePath.lastPathComponent.toString() }
+        currentPane()?.let {
+            StickyTreeDebugLogger.logAttachment(it.tree, "initialize")
+            attachToPane(it)
         }
     }
 
-    fun stickyPanelHeight(): Int {
-        return onEdt { currentAttachment()?.stickyPanel?.preferredSize?.height ?: 0 }
+    fun isAttached() = withAttachment(false) { true }
+
+    fun stickyItemLabels(): List<String> =
+        withAttachment(emptyList()) { visualStickyItems.items().map { it.treePath.lastPathComponent.toString() } }
+
+    fun stickyPanelHeight() = withAttachment(0) { stickyPanel.preferredSize.height }
+
+    fun visibleRowLabels(): List<String> = withAttachment(emptyList()) {
+        (0 until tree.rowCount).mapNotNull(tree::getPathForRow).map { it.lastPathComponent.toString() }
     }
 
-    fun visibleRowLabels(): List<String> {
-        return onEdt {
-            val tree = currentAttachment()?.tree ?: return@onEdt emptyList()
-            (0 until tree.rowCount).mapNotNull { row ->
-                tree.getPathForRow(row)?.lastPathComponent?.toString()
-            }
-        }
-    }
-
-    fun selectedPathLabels(): List<String> {
-        return onEdt {
-            currentAttachment()?.tree
-                ?.selectionPath
-                ?.path
-                ?.drop(1)
-                ?.map { it.toString() }
-                .orEmpty()
-        }
+    fun selectedPathLabels(): List<String> = withAttachment(emptyList()) {
+        tree.selectionPath?.path?.drop(1)?.map(Any::toString).orEmpty()
     }
 
     fun selectPath(pathSegments: List<String>): Boolean {
@@ -84,14 +67,10 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
 
         return onEdt {
             val currentAttachment = currentAttachment() ?: return@onEdt false
-            val selectedPath = currentAttachment.tree.selectionPath ?: return@onEdt false
-            val row = currentAttachment.tree.getRowForPath(selectedPath)
-            if (row < 0) {
-                return@onEdt false
-            }
-
-            scrollToRow(currentAttachment, row)
-            true
+            currentAttachment.tree.selectionPath
+                ?.let(currentAttachment.tree::getRowForPath)
+                ?.takeIf { it >= 0 }
+                ?.also { scrollToRow(currentAttachment, it) } != null
         }
     }
 
@@ -136,9 +115,7 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
         return projectView.getProjectViewPaneById(currentPaneId)
     }
 
-    private fun currentProjectView(): ProjectViewImpl? {
-        return ProjectView.getInstance(project) as? ProjectViewImpl
-    }
+    private fun currentProjectView() = ProjectView.getInstance(project) as? ProjectViewImpl
 
     private fun detach() {
         attachment?.dispose()
@@ -149,6 +126,9 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
         attachToPane(currentPane())
         return attachment
     }
+
+    private fun <T> withAttachment(default: T, action: StickyTreeAttachment.() -> T): T =
+        onEdt { currentAttachment()?.action() ?: default }
 
     private fun installStickyPanel(scrollPane: JScrollPane, stickyPanel: StickyTreePanel): LayoutManager {
         val originalLayout = scrollPane.layout

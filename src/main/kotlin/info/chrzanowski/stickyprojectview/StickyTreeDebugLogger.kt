@@ -12,16 +12,12 @@ internal object StickyTreeDebugLogger {
     private val LOG = Logger.getInstance(StickyTreeDebugLogger::class.java)
 
     fun logAttachment(tree: JTree, reason: String) {
-        if (!LOG.isDebugEnabled) {
-            return
-        }
-
-        LOG.debug(
+        debug {
             "[SPV] attach reason=$reason" +
                 " treeHash=${System.identityHashCode(tree)}" +
                 " rowCount=${tree.rowCount}" +
                 " visible=${rect(tree.visibleRect)}"
-        )
+        }
     }
 
     fun logManagerEvent(
@@ -33,11 +29,7 @@ internal object StickyTreeDebugLogger {
         panelHeight: Int,
         stickyItems: List<StickyTreeItem>
     ) {
-        if (!LOG.isDebugEnabled) {
-            return
-        }
-
-        LOG.debug(
+        debug {
             "[SPV] manager reason=$reason" +
                 " force=$forceRecalculate" +
                 " didRecalculate=$didRecalculate" +
@@ -46,7 +38,7 @@ internal object StickyTreeDebugLogger {
                 " panelHeight=$panelHeight" +
                 " visibleRows=${visibleRows(tree, visibleRect)}" +
                 " stack=${stack(tree, stickyItems)}"
-        )
+        }
     }
 
     fun logRecalculation(
@@ -56,11 +48,7 @@ internal object StickyTreeDebugLogger {
         panelHeight: Int,
         steps: List<String>
     ) {
-        if (!LOG.isDebugEnabled) {
-            return
-        }
-
-        LOG.debug(
+        debug {
             "[SPV] recalc" +
                 " treeHash=${System.identityHashCode(tree)}" +
                 " visible=${rect(visibleRect)}" +
@@ -68,7 +56,7 @@ internal object StickyTreeDebugLogger {
                 " visibleRows=${visibleRows(tree, visibleRect)}" +
                 " stack=${stack(tree, stickyItems)}" +
                 " steps=${steps.joinToString(" || ")}"
-        )
+        }
     }
 
     fun logPaint(
@@ -78,11 +66,7 @@ internal object StickyTreeDebugLogger {
         stickyItems: List<StickyTreeItem>,
         placements: List<String>
     ) {
-        if (!LOG.isDebugEnabled) {
-            return
-        }
-
-        LOG.debug(
+        debug {
             "[SPV] paint" +
                 " treeHash=${System.identityHashCode(tree)}" +
                 " panel=${panelWidth}x$panelHeight" +
@@ -90,7 +74,7 @@ internal object StickyTreeDebugLogger {
                 " visibleRows=${visibleRows(tree, tree.visibleRect)}" +
                 " stack=${stack(tree, stickyItems)}" +
                 " placements=${placements.joinToString(" | ")}"
-        )
+        }
     }
 
     private fun visibleRows(tree: JTree, visibleRect: Rectangle, limit: Int = 8): String {
@@ -137,15 +121,13 @@ internal object StickyTreeDebugLogger {
         }
     }
 
-    fun pathText(path: TreePath): String {
-        return path.path.joinToString(" > ") { it.toString() }
-    }
+    fun pathText(path: TreePath) = path.path.joinToString(" > ") { it.toString() }
 
-    fun rect(rectangle: Rectangle?): String {
-        return if (rectangle == null) {
-            "null"
-        } else {
-            "(${rectangle.x},${rectangle.y},${rectangle.width},${rectangle.height})"
+    fun rect(rectangle: Rectangle?) = rectangle?.let { "(${it.x},${it.y},${it.width},${it.height})" } ?: "null"
+
+    private inline fun debug(message: () -> String) {
+        if (LOG.isDebugEnabled) {
+            LOG.debug(message())
         }
     }
 }

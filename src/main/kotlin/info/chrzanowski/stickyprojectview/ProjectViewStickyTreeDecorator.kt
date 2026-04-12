@@ -14,11 +14,9 @@ class ProjectViewStickyTreeDecorator : ProjectActivity {
 
     override suspend fun execute(project: Project) {
         SwingUtilities.invokeLater {
-            if (project.isDisposed) {
-                return@invokeLater
+            if (!project.isDisposed) {
+                project.service<StickyProjectViewService>().initialize()
             }
-
-            project.service<StickyProjectViewService>().initialize()
         }
     }
 }

@@ -74,11 +74,6 @@ class StickyTreePanel(
                 continue
             }
 
-            if (width <= 0) {
-                placements += "${StickyTreeDebugLogger.pathText(stickyItem.treePath)} skipped paintWidth=$width"
-                continue
-            }
-
             placements += "${StickyTreeDebugLogger.pathText(stickyItem.treePath)} row=${stickyItem.row} y=$yLocation visibleTop=$visibleTop visibleBottom=$visibleBottom rowBounds=${StickyTreeDebugLogger.rect(rowBounds)} paintWidth=$width"
             val rowGraphics = g.create(0, visibleTop, width, visibleBottom - visibleTop)
             try {
