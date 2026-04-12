@@ -1,6 +1,7 @@
 package info.chrzanowski.stickyprojectview
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 import java.awt.Color
 import java.awt.Graphics
@@ -79,7 +80,8 @@ class VisualStickyTreeItemsTest {
             val manager = StickyTreeManager(tree, scrollPane, stickyItems, stickyPanel, DisposableStub())
 
             manager.forceUpdate()
-            assertEquals(19, stickyPanel.preferredSize.height)
+            assertEquals(19, stickyPanel.stickyContentHeight())
+            assertNotEquals(stickyPanel.stickyContentHeight(), stickyPanel.preferredSize.height)
 
             tree.collapseRow(0)
 
@@ -164,6 +166,44 @@ class VisualStickyTreeItemsTest {
     }
 
     @Test
+    fun `sticky panel paints a separator and shadow at the bottom edge`() {
+        runOnEdt {
+            val rowColor = Color(0x7A, 0xC7, 0xFF)
+            val tree = StripeTree(
+                treeNode("root",
+                    treeNode("parent",
+                        treeNode("leaf")
+                    ),
+                    treeNode("sibling")
+                ),
+                mapOf("parent" to rowColor)
+            ).applyTreeDefaults()
+            val stickyItems = VisualStickyTreeItems(tree)
+            stickyItems.recalculate(Rectangle(0, 1, 200, 120))
+
+            val stickyPanel = StickyTreePanel(tree, stickyItems)
+            stickyPanel.repaintStickyItems()
+            stickyPanel.setSize(stickyPanel.preferredSize)
+
+            val image = BufferedImage(stickyPanel.width, stickyPanel.height, BufferedImage.TYPE_INT_ARGB)
+            val graphics = image.createGraphics()
+            try {
+                stickyPanel.paint(graphics)
+            } finally {
+                graphics.dispose()
+            }
+
+            val sampleX = stickyPanel.width / 2
+            val borderY = stickyPanel.stickyContentHeight()
+            assertNotEquals(tree.background.rgb, image.getRGB(sampleX, borderY))
+            assertNotEquals(image.getRGB(sampleX, borderY), image.getRGB(sampleX, borderY + 1))
+            val shadowAlpha = image.getRGB(sampleX, borderY + 1).ushr(24) and 0xFF
+            assertNotEquals(0, shadowAlpha)
+            assertNotEquals(255, shadowAlpha)
+        }
+    }
+
+    @Test
     fun `clicking sticky item reveals it below its parents`() {
         runOnEdt {
             val tree = createTree(
@@ -207,7 +247,7 @@ class VisualStickyTreeItemsTest {
             assertEquals("child", tree.selectionPath.lastPathComponent.toString())
             assertEquals(listOf("parent"), stickyItems.items().map(::labelOf))
             val childBounds = tree.getRowBounds(tree.getRowForPath(tree.selectionPath))
-            assertEquals(stickyPanel.preferredSize.height, childBounds.y - scrollPane.viewport.viewPosition.y)
+            assertEquals(stickyPanel.stickyContentHeight(), childBounds.y - scrollPane.viewport.viewPosition.y)
 
             manager.dispose()
         }
