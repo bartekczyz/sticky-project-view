@@ -4,11 +4,13 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.awt.Color
 import java.awt.Graphics
+import java.awt.Point
 import java.awt.Rectangle
+import java.awt.event.MouseEvent
 import java.awt.image.BufferedImage
-import javax.swing.JTree
 import javax.swing.JScrollPane
 import javax.swing.SwingUtilities
+import javax.swing.JTree
 import javax.swing.tree.DefaultMutableTreeNode
 
 class VisualStickyTreeItemsTest {
@@ -161,6 +163,95 @@ class VisualStickyTreeItemsTest {
         }
     }
 
+    @Test
+    fun `clicking sticky item reveals it below its parents`() {
+        runOnEdt {
+            val tree = createTree(
+                treeNode("root",
+                    treeNode("parent",
+                        treeNode("child",
+                            treeNode("leaf")
+                        ),
+                        treeNode("sibling")
+                    )
+                )
+            )
+            val stickyItems = VisualStickyTreeItems(tree)
+            val scrollPane = JScrollPane(tree).apply {
+                setSize(200, 140)
+                doLayout()
+                viewport.viewPosition = Point(0, 21)
+            }
+            lateinit var manager: StickyTreeManager
+            val stickyPanel = StickyTreePanel(tree, stickyItems) { manager.navigateTo(it) }
+            manager = StickyTreeManager(tree, scrollPane, stickyItems, stickyPanel, DisposableStub())
+
+            manager.forceUpdate()
+            stickyPanel.setSize(200, stickyItems.height())
+            assertEquals(listOf("parent", "child"), stickyItems.items().map(::labelOf))
+
+            stickyPanel.dispatchEvent(
+                MouseEvent(
+                    stickyPanel,
+                    MouseEvent.MOUSE_PRESSED,
+                    System.currentTimeMillis(),
+                    0,
+                    50,
+                    25,
+                    1,
+                    false,
+                    MouseEvent.BUTTON1
+                )
+            )
+
+            assertEquals("child", tree.selectionPath.lastPathComponent.toString())
+            assertEquals(listOf("parent"), stickyItems.items().map(::labelOf))
+            val childBounds = tree.getRowBounds(tree.getRowForPath(tree.selectionPath))
+            assertEquals(stickyPanel.preferredSize.height, childBounds.y - scrollPane.viewport.viewPosition.y)
+
+            manager.dispose()
+        }
+    }
+
+    @Test
+    fun `navigation target offsets clicked item by remaining sticky height`() {
+        runOnEdt {
+            val tree = createTree(
+                treeNode("root",
+                    treeNode("before-0"),
+                    treeNode("before-1"),
+                    treeNode("before-2"),
+                    treeNode("before-3"),
+                    treeNode("before-4"),
+                    treeNode("parent",
+                        treeNode("child",
+                            treeNode("leaf")
+                        ),
+                        treeNode("sibling")
+                    )
+                )
+            )
+            expandAll(tree)
+            tree.setSize(200, 400)
+            val stickyItems = VisualStickyTreeItems(tree)
+            val viewportRect = Rectangle(0, tree.getRowBounds(tree.rowCount - 3).y + 1, 200, 140)
+            stickyItems.recalculate(viewportRect)
+            assertEquals(listOf("parent", "child"), stickyItems.items().map(::labelOf))
+
+            val scrollPane = JScrollPane(tree).apply {
+                setSize(200, 140)
+                doLayout()
+            }
+            val manager = StickyTreeManager(tree, scrollPane, stickyItems, StickyTreePanel(tree, stickyItems), DisposableStub())
+            val childStickyItem = stickyItems.items().last()
+            val childBounds = tree.getRowBounds(childStickyItem.row)
+
+            assertEquals(childBounds.y - 20, manager.navigationTargetY(childStickyItem, viewportRect))
+
+            manager.dispose()
+        }
+    }
+
     private fun createTree(root: DefaultMutableTreeNode): JTree {
         return JTree(root).applyTreeDefaults()
     }
@@ -177,6 +268,14 @@ class VisualStickyTreeItemsTest {
 
     private fun runOnEdt(block: () -> Unit) {
         SwingUtilities.invokeAndWait(block)
+    }
+
+    private fun expandAll(tree: JTree) {
+        var row = 0
+        while (row < tree.rowCount) {
+            tree.expandRow(row)
+            row++
+        }
     }
 
     private class DisposableStub : com.intellij.openapi.Disposable {

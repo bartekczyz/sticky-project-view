@@ -73,7 +73,28 @@ internal object StickyTreeDebugLogger {
                 " visible=${rect(tree.visibleRect)}" +
                 " visibleRows=${visibleRows(tree, tree.visibleRect)}" +
                 " stack=${stack(tree, stickyItems)}" +
-                " placements=${placements.joinToString(" | ")}"
+            " placements=${placements.joinToString(" | ")}"
+        }
+    }
+
+    fun logNavigation(
+        tree: JTree,
+        stickyItem: StickyTreeItem,
+        rowBounds: Rectangle,
+        visibleRect: Rectangle,
+        targetY: Int,
+        previewPanelHeight: Int
+    ) {
+        debug {
+            "[SPV] navigate" +
+                " treeHash=${System.identityHashCode(tree)}" +
+                " target=${pathText(stickyItem.treePath)}" +
+                " row=${stickyItem.row}" +
+                " currentY=${visibleRect.y}" +
+                " targetY=$targetY" +
+                " previewPanelHeight=$previewPanelHeight" +
+                " currentStickyY=${stickyItem.yLocation}" +
+                " rowBounds=${rect(rowBounds)}"
         }
     }
 

@@ -4,6 +4,8 @@ package info.chrzanowski.stickyprojectview
 import com.intellij.ui.components.JBPanel
 import java.awt.Dimension
 import java.awt.Graphics
+import java.awt.event.MouseAdapter
+import java.awt.event.MouseEvent
 import javax.swing.JTree
 import javax.swing.JViewport
 import javax.swing.SwingUtilities
@@ -14,7 +16,8 @@ import javax.swing.SwingUtilities
  */
 class StickyTreePanel(
     private val tree: JTree,
-    private val visualStickyItems: VisualStickyTreeItems
+    private val visualStickyItems: VisualStickyTreeItems,
+    private val onItemClick: (StickyTreeItem) -> Unit = {}
 ) : JBPanel<StickyTreePanel>() {
     private var panelWidth: Int = 0
     private var panelHeight: Int = 0
@@ -23,6 +26,18 @@ class StickyTreePanel(
         layout = null
         isOpaque = true
         background = tree.background
+        addMouseListener(object : MouseAdapter() {
+            override fun mousePressed(event: MouseEvent) {
+                if (!SwingUtilities.isLeftMouseButton(event)) {
+                    return
+                }
+
+                itemAt(event.x, event.y)?.let {
+                    event.consume()
+                    onItemClick(it)
+                }
+            }
+        })
     }
     
     /**
@@ -89,6 +104,23 @@ class StickyTreePanel(
     }
 
     override fun getPreferredSize(): Dimension = Dimension(panelWidth, panelHeight)
+
+    private fun itemAt(x: Int, y: Int): StickyTreeItem? {
+        if (x !in 0 until width || y !in 0 until height) {
+            return null
+        }
+
+        val defaultRowHeight = tree.rowHeight.coerceAtLeast(1)
+        for (stickyItem in visualStickyItems.items()) {
+            val rowHeight = tree.getRowBounds(stickyItem.row)?.height?.coerceAtLeast(defaultRowHeight) ?: defaultRowHeight
+            val visibleTop = maxOf(stickyItem.yLocation, 0)
+            val visibleBottom = minOf(stickyItem.yLocation + rowHeight, height)
+            if (y in visibleTop until visibleBottom) {
+                return stickyItem
+            }
+        }
+        return null
+    }
 
     private fun currentViewportWidth(): Int {
         val viewport = SwingUtilities.getAncestorOfClass(JViewport::class.java, tree) as? JViewport

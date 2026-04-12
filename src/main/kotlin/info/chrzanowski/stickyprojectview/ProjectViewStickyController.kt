@@ -100,13 +100,14 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
 
         val attachmentDisposable = Disposer.newDisposable()
         val visualStickyItems = VisualStickyTreeItems(tree)
-        val stickyPanel = StickyTreePanel(tree, visualStickyItems)
-        val manager = StickyTreeManager(tree, scrollPane, visualStickyItems, stickyPanel, attachmentDisposable)
+        lateinit var stickyManager: StickyTreeManager
+        val stickyPanel = StickyTreePanel(tree, visualStickyItems) { stickyManager.navigateTo(it) }
+        stickyManager = StickyTreeManager(tree, scrollPane, visualStickyItems, stickyPanel, attachmentDisposable)
 
         val originalLayout = installStickyPanel(scrollPane, stickyPanel)
 
-        attachment = StickyTreeAttachment(tree, scrollPane, stickyPanel, visualStickyItems, manager, attachmentDisposable, originalLayout)
-        manager.forceUpdate()
+        attachment = StickyTreeAttachment(tree, scrollPane, stickyPanel, visualStickyItems, stickyManager, attachmentDisposable, originalLayout)
+        stickyManager.forceUpdate()
     }
 
     private fun currentPane(): AbstractProjectViewPane? {
@@ -151,7 +152,7 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
     private fun scrollToRow(attachment: StickyTreeAttachment, row: Int) {
         val rowBounds = attachment.tree.getRowBounds(row) ?: return
         val extentHeight = attachment.scrollPane.viewport.extentSize.height
-        val maxY = (attachment.tree.preferredSize.height - extentHeight).coerceAtLeast(0)
+        val maxY = (maxOf(attachment.tree.height, attachment.tree.preferredSize.height) - extentHeight).coerceAtLeast(0)
         attachment.scrollPane.viewport.viewPosition = Point(0, rowBounds.y.coerceAtMost(maxY))
         attachment.manager.forceUpdate()
     }

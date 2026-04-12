@@ -16,7 +16,7 @@ class VisualStickyTreeItems(private val tree: JTree) {
     /**
      * Recalculates which tree items should be sticky based on the current viewport
      */
-    fun recalculate(visibleRect: Rectangle) {
+    fun recalculate(visibleRect: Rectangle, revealedPath: TreePath? = null) {
         clear()
         val steps = mutableListOf<String>()
 
@@ -27,7 +27,7 @@ class VisualStickyTreeItems(private val tree: JTree) {
         }
 
         // No sticky items if we haven't scrolled at all
-        if (visibleRect.y <= 0) {
+        if (visibleRect.y < 0 || visibleRect.y == 0 && revealedPath == null) {
             steps += "stop topOfViewport y=${visibleRect.y}"
             StickyTreeDebugLogger.logRecalculation(tree, visibleRect, stickyItems, totalHeight, steps)
             return
@@ -52,6 +52,10 @@ class VisualStickyTreeItems(private val tree: JTree) {
             }
 
             val stickyPath = stickyPathChain[stickyDepth]
+            if (stickyPath == revealedPath) {
+                steps += "stop revealedPath depth=$stickyDepth candidate=${StickyTreeDebugLogger.pathText(stickyPath)}"
+                break
+            }
             if (!isStickyCandidate(stickyPath)) {
                 steps += "stop notStickyCandidate depth=$stickyDepth candidate=${StickyTreeDebugLogger.pathText(stickyPath)}"
                 break
@@ -65,7 +69,14 @@ class VisualStickyTreeItems(private val tree: JTree) {
 
             val rowBounds = tree.getRowBounds(row) ?: break
             val rowHeight = rowBounds.height.coerceAtLeast(1)
-            if (rowBounds.y >= lookupTop || isPanelTooBig(rowHeight, panelHeight, visibleRect.height)) {
+            val keepsRevealedItemBelowStack =
+                revealedPath != null &&
+                    stickyPath != revealedPath &&
+                    isDescendantOf(revealedPath, stickyPath) &&
+                    rowBounds.y == lookupTop
+            if ((rowBounds.y > lookupTop || rowBounds.y == lookupTop && !keepsRevealedItemBelowStack) ||
+                isPanelTooBig(rowHeight, panelHeight, visibleRect.height)
+            ) {
                 steps += "stop rowNotAboveOrPanelTooBig depth=$stickyDepth candidate=${StickyTreeDebugLogger.pathText(stickyPath)} rowBounds=${StickyTreeDebugLogger.rect(rowBounds)} lookupTop=$lookupTop panelHeight=$panelHeight rowHeight=$rowHeight viewportHeight=${visibleRect.height}"
                 break
             }
