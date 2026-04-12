@@ -24,7 +24,5 @@ data class StickyTreeItem(
     val yLocation: Int
 ) : Comparable<StickyTreeItem> {
 
-    override fun compareTo(other: StickyTreeItem): Int {
-        return row.compareTo(other.row)
-    }
+    override fun compareTo(other: StickyTreeItem) = row.compareTo(other.row)
 }

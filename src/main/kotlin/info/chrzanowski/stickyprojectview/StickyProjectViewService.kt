@@ -8,7 +8,6 @@ import com.intellij.openapi.util.Disposer
 import org.jetbrains.annotations.ApiStatus
 
 @Service(Service.Level.PROJECT)
-@ApiStatus.Internal
 class StickyProjectViewService(project: Project) : Disposable {
 
     private val controller = ProjectViewStickyController(project)
@@ -17,33 +16,19 @@ class StickyProjectViewService(project: Project) : Disposable {
         Disposer.register(this, controller)
     }
 
-    fun initialize() {
-        controller.initialize()
-    }
+    fun initialize() = controller.initialize()
 
-    fun isAttached(): Boolean {
-        return controller.isAttached()
-    }
+    fun isAttached() = controller.isAttached()
 
-    fun getStickyItemLabels(): List<String> {
-        return controller.stickyItemLabels()
-    }
+    fun getStickyItemLabels() = controller.stickyItemLabels()
 
-    fun getStickyPanelHeight(): Int {
-        return controller.stickyPanelHeight()
-    }
+    fun getStickyPanelHeight() = controller.stickyPanelHeight()
 
-    fun getVisibleRowLabels(): List<String> {
-        return controller.visibleRowLabels()
-    }
+    fun getVisibleRowLabels() = controller.visibleRowLabels()
 
-    fun getSelectedPathLabels(): List<String> {
-        return controller.selectedPathLabels()
-    }
+    fun getSelectedPathLabels() = controller.selectedPathLabels()
 
-    fun selectPath(pathSegments: List<String>): Boolean {
-        return controller.selectPath(pathSegments)
-    }
+    fun selectPath(pathSegments: List<String>) = controller.selectPath(pathSegments)
 
     override fun dispose() = Unit
 }

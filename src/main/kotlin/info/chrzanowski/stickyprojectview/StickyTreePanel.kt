@@ -26,7 +26,7 @@ class StickyTreePanel(
     }
     
     /**
-     * Repaints the sticky items based on current state
+     * Repaints the sticky items based on the current state
      */
     fun repaintStickyItems() {
         val items = visualStickyItems.items()
