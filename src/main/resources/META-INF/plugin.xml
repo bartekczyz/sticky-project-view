@@ -3,6 +3,15 @@
     <id>sticky-project-view</id>
     <name>Sticky Project View</name>
     <vendor>hsz</vendor>
+    <description><![CDATA[
+        <p>Sticky Project View adds sticky parent nodes to the IntelliJ Project View.</p>
+        <p>It keeps expanded parent directories pinned at the top while you scroll and preserves the native Project View look:</p>
+        <ul>
+            <li>expanded parent directories stay pinned at the top while you scroll</li>
+            <li>sticky rows keep native Project View rendering, including arrows, icons, colors, and selection</li>
+            <li>clicking a sticky row reveals and selects that node in the tree while keeping its parents pinned above it</li>
+        </ul>
+    ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.modules.lang</depends>
