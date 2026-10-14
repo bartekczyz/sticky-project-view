@@ -1,16 +1,27 @@
 <!-- Keep a Changelog guide -> https://keepachangelog.com -->
 
-# sticky-project-view Changelog
+# Sticky Project View Changelog
 
 ## [Unreleased]
 
-- Use the actual plugin version for packaged notes and detect release changelog changes before creating a pull request.
+### Added
+
 - Add a keyboard-accessible sticky-ancestor chooser.
 - Allow configuring sticky content height between 10% and 90% of the viewport.
 - Add an IDE-wide, persistent Project View toggle for sticky rows.
-- Restore sticky-overlay mouse interactions and show full-path tooltips.
+- Show full-path tooltips for sticky rows.
+
+### Changed
+
+- Run Starter/Driver UI tests against the configured IDEA 2025.3.6.1 baseline.
+- Update GitHub Actions and upload installable plugin ZIP artifacts.
+- Update Gradle to 9.8.1 and IntelliJ Platform Gradle Plugin to 2.19.0, with an explicit Java 21 toolchain.
+
+### Fixed
+
+- Use the actual plugin version for packaged notes and detect release changelog changes before creating a pull request.
+- Restore sticky-overlay mouse interactions.
 - Fix horizontally scrolled sticky rows and stale rows after selection changes.
-- Run Starter/Driver UI tests against the configured IDEA 2025.3 baseline.
 
 ## [0.0.2] - 2026-04-13
 

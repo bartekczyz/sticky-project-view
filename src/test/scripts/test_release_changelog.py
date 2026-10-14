@@ -98,6 +98,8 @@ class ReleaseChangelogTest(unittest.TestCase):
                 notes = descriptor.findtext("change-notes")
                 self.assertIn(present, notes)
                 self.assertNotIn(absent, notes)
+                for category in ("Added", "Changed", "Fixed"):
+                    self.assertIn(f"<h3>{category}</h3>", notes)
 
 
 if __name__ == "__main__":
