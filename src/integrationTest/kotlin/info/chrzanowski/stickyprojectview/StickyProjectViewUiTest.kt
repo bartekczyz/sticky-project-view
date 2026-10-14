@@ -74,6 +74,7 @@ class StickyProjectViewUiTest {
             TestCase(IdeProductProvider.IU, LocalProjectInfo(projectDir, isReusable = true)).withVersion(platformVersion)
         ).apply {
             PluginConfigurator(this).installPluginFromPath(pluginPath)
+            seedProfilerState(paths.configDir)
         }
         context.runIdeWithDriver(runTimeout = 3.minutes, launchName = "disable").useDriverAndCloseIde {
             waitForProjectOpen()
@@ -122,6 +123,7 @@ class StickyProjectViewUiTest {
                 .withVersion(platformVersion)
         ).apply {
             PluginConfigurator(this).installPluginFromPath(pluginPath)
+            seedProfilerState(paths.configDir)
         }.runIdeWithDriver(runTimeout = 8.minutes).useDriverAndCloseIde {
             waitForProjectOpen()
             waitForIndicators(5.minutes)
@@ -285,7 +287,51 @@ class StickyProjectViewUiTest {
         }
     }
 
+    private fun seedProfilerState(configDir: Path) {
+        // IDEA 2025.3's first-save profiler bug creates unsupported OS configurations on macOS.
+        // Use its own post-save state, including known types, rather than filtering IDE errors.
+        configDir.resolve("options").createDirectories().resolve("profilerRunConfigurations.xml").writeText(
+            """
+            <application>
+              <component name="ProfilerRunConfigurations">
+                <profilerRunConfigurations>
+                  <item configurationTypeId="IntellijProfilerConfiguration">
+                    <IntellijProfilerConfigurationState name="IntelliJ Profiler" />
+                  </item>
+                </profilerRunConfigurations>
+                <knownConfigurationTypes>
+                  <id>IntellijProfilerConfiguration</id>
+                  <id>AsyncProfilerCPUConfiguration</id>
+                  <id>AsyncProfilerMemoryConfiguration</id>
+                  <id>AsyncProfilerConfiguration</id>
+                  <id>WinAsyncProfilerConfigurationType</id>
+                  <id>JVMDTraceProfilerConfiguration</id>
+                  <id>JFRSimpleConfiguration</id>
+                </knownConfigurationTypes>
+                <migrationStatus>
+                  <status languageGroup="Java Profiler Configuration Type" lastMigrationIndex="3" />
+                </migrationStatus>
+              </component>
+            </application>
+            """.trimIndent()
+        )
+    }
+
     private fun createProjectStructure(projectDir: Path) {
+        // Pre-create the IDE's local ignore rules so Settings saves do not race their generation
+        // with the baseline full-line plugin's cancellable state serialization.
+        projectDir.resolve(".idea").createDirectories().resolve(".gitignore").writeText(
+            """
+            # Default ignored files
+            /shelf/
+            /workspace.xml
+            # Editor-based HTTP Client requests
+            /httpRequests/
+            # Datasource local storage ignored files
+            /dataSources/
+            /dataSources.local.xml
+            """.trimIndent() + "\n"
+        )
         var currentDirectory = projectDir
         TARGET_DIRECTORY_PATH.forEach { segment ->
             currentDirectory = currentDirectory.resolve(segment).createDirectories()

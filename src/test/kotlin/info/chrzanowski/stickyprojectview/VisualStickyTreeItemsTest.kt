@@ -195,6 +195,11 @@ class VisualStickyTreeItemsTest {
             )
             val stickyItems = VisualStickyTreeItems(tree)
 
+            stickyItems.recalculate(Rectangle(0, 21, 200, 120))
+            assertEquals(listOf("parent"), stickyItems.items().map(::labelOf))
+            assertEquals(listOf(-1), stickyItems.items().map(StickyTreeItem::yLocation))
+            assertEquals(19, stickyItems.height())
+
             for (percent in listOf(10, 50, 90)) {
                 stickyItems.recalculate(Rectangle(0, 21, 200, 401), maxStickyHeightPercent = percent)
                 assertEquals(listOf("parent"), stickyItems.items().map(::labelOf))
