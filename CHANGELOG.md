@@ -4,6 +4,7 @@
 
 ## [Unreleased]
 
+- Use the actual plugin version for packaged notes and detect release changelog changes before creating a pull request.
 - Add a keyboard-accessible sticky-ancestor chooser.
 - Allow configuring sticky content height between 10% and 90% of the viewport.
 - Add an IDE-wide, persistent Project View toggle for sticky rows.

@@ -50,8 +50,8 @@ dependencies {
 intellijPlatform {
     pluginConfiguration {
         val changelog = project.changelog // local variable for configuration cache compatibility
-        // Get the latest available change notes from the changelog file
-        changeNotes = providers.gradleProperty("pluginVersion").map { pluginVersion ->
+        // Use released notes when available, otherwise the Unreleased section.
+        changeNotes = providers.gradleProperty("version").map { pluginVersion ->
             with(changelog) {
                 renderItem(
                     (getOrNull(pluginVersion) ?: getUnreleased())

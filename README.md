@@ -35,7 +35,11 @@ Use Java 21 and the Gradle wrapper:
 ./gradlew compileKotlin compileTestKotlin compileIntegrationTestKotlin
 ./gradlew test
 ./gradlew integrationTest
+./gradlew buildPlugin verifyPlugin
+python3 src/test/scripts/test_release_changelog.py
 ```
+
+The Python 3 release fixtures check changelog-only change detection/commits and both released-note and Unreleased packaging paths in temporary local projects. They do not publish, upload, push, or create pull requests. Packaged notes use the existing `version` property; matching released notes take precedence over Unreleased.
 
 `platformVersion` in `gradle.properties` selects both the compilation platform and the Starter/Driver IDE (currently IDEA 2025.3). Integration tests assert and log the running release/build and the exact selected path. Starter installs the plugin, launches the IDE, and closes it; no separate Robot server is needed. A graphical desktop is required; on Linux use `xvfb-run -a ./gradlew integrationTest`.
 

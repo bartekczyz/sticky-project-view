@@ -71,9 +71,19 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload ${{ github.event.release.tag_name }} ./build/distributions/*
 
+      # Detect only changes made to the release changelog
+      - name: Detect Changelog Changes
+        id: changelog
+        run: |
+          if git diff --quiet HEAD -- CHANGELOG.md; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
       # Create a pull request
       - name: Create Pull Request
-        if: ${{ steps.properties.outputs.changelog != '' }}
+        if: ${{ steps.changelog.outputs.changed == 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -85,7 +95,9 @@ jobs:
           git config user.name "GitHub Action"
 
           git checkout -b $BRANCH
-          git commit -am "Changelog update - $VERSION"
+          git add -- CHANGELOG.md
+          git diff --cached --quiet -- CHANGELOG.md && exit 0
+          git commit -m "Changelog update - $VERSION" -- CHANGELOG.md
           git push --set-upstream origin $BRANCH
           
           gh label create "$LABEL" \
