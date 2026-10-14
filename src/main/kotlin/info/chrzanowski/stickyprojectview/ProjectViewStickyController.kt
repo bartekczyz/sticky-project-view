@@ -6,6 +6,7 @@ import com.intellij.ide.projectView.impl.AbstractProjectViewPane
 import com.intellij.ide.projectView.impl.ProjectViewImpl
 import com.intellij.ide.projectView.impl.ProjectViewListener
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.ActionCallback
 import com.intellij.openapi.util.Disposer
@@ -14,10 +15,13 @@ import java.awt.Container
 import java.awt.LayoutManager
 import java.awt.Point
 import java.nio.file.Path
+import java.util.*
 import javax.swing.JScrollPane
 import javax.swing.JTree
 import javax.swing.ScrollPaneLayout
 import javax.swing.SwingUtilities
+import javax.swing.tree.TreeModel
+import javax.swing.tree.TreePath
 
 class ProjectViewStickyController(private val project: Project) : Disposable {
 
@@ -34,7 +38,7 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
                 override fun paneShown(current: AbstractProjectViewPane, previous: AbstractProjectViewPane?) {
                     onEdt { attachToPane(current) }
                 }
-            }
+            },
         )
     }
 
@@ -57,6 +61,38 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
     }
 
     fun isAttached() = withAttachment(false) { true }
+
+    fun hasStickyAncestors() = withAttachment(false) { visualStickyItems.items().isNotEmpty() }
+
+    fun stickyAncestors(): List<StickyAncestor> = withAttachment(emptyList()) {
+        choices.clear()
+        visualStickyItems.items().map { item ->
+            choices[item.treePath] = tree.model
+            StickyAncestor(
+                item.treePath,
+                ReadAction.compute<String, RuntimeException> { item.treePath.lastPathComponent.toString() },
+                StickyTreePathPresentation.fullPath(item.treePath),
+            )
+        }
+    }
+
+    fun navigateToStickyAncestor(path: TreePath): Boolean = withAttachment(false) {
+        if (choices[path] !== tree.model) return@withAttachment false
+        if (path.path.firstOrNull() !== tree.model.root) return@withAttachment false
+        for (index in 1 until path.pathCount) {
+            val parent = path.getPathComponent(index - 1)
+            val child = path.getPathComponent(index)
+            if ((0 until tree.model.getChildCount(parent)).none { tree.model.getChild(parent, it) === child }) {
+                return@withAttachment false
+            }
+        }
+        val item = visualStickyItems.items().firstOrNull { it.treePath == path } ?: return@withAttachment false
+        if (tree.getRowForPath(path) < 0) return@withAttachment false
+        manager.navigateTo(item)
+        true
+    }
+
+    fun focusTree() = withAttachment(Unit) { tree.requestFocusInWindow(); Unit }
 
     fun stickyItemLabels(): List<String> =
         withAttachment(emptyList()) { visualStickyItems.items().map { it.treePath.lastPathComponent.toString() } }
@@ -132,14 +168,32 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
         val visualStickyItems = VisualStickyTreeItems(tree)
         lateinit var stickyManager: StickyTreeManager
         val stickyPanel = StickyTreePanel(tree, visualStickyItems)
-        stickyManager = StickyTreeManager(tree, scrollPane, visualStickyItems, stickyPanel, attachmentDisposable, maxStickyHeightPercent)
-        Disposer.register(attachmentDisposable, StickyTreeInputRouter(tree, stickyPanel) { item, originalX ->
-            stickyManager.navigateTo(item, originalX)
-        })
+        stickyManager = StickyTreeManager(
+            tree,
+            scrollPane,
+            visualStickyItems,
+            stickyPanel,
+            attachmentDisposable,
+            maxStickyHeightPercent,
+        )
+        Disposer.register(
+            attachmentDisposable,
+            StickyTreeInputRouter(tree, stickyPanel) { item, originalX ->
+                stickyManager.navigateTo(item, originalX)
+            },
+        )
 
         val originalLayout = installStickyPanel(scrollPane, stickyPanel)
 
-        attachment = StickyTreeAttachment(tree, scrollPane, stickyPanel, visualStickyItems, stickyManager, attachmentDisposable, originalLayout)
+        attachment = StickyTreeAttachment(
+            tree,
+            scrollPane,
+            stickyPanel,
+            visualStickyItems,
+            stickyManager,
+            attachmentDisposable,
+            originalLayout,
+        )
         stickyManager.forceUpdate()
     }
 
@@ -187,7 +241,7 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
         val maxY = (maxOf(attachment.tree.height, attachment.tree.preferredSize.height) - extentHeight).coerceAtLeast(0)
         attachment.scrollPane.viewport.viewPosition = Point(
             clampViewportX(attachment.tree, attachment.scrollPane, originalX),
-            rowBounds.y.coerceIn(0, maxY)
+            rowBounds.y.coerceIn(0, maxY),
         )
         attachment.manager.forceUpdate()
     }
@@ -211,8 +265,10 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
         val visualStickyItems: VisualStickyTreeItems,
         val manager: StickyTreeManager,
         private val disposable: Disposable,
-        private val originalLayout: LayoutManager
+        private val originalLayout: LayoutManager,
     ) {
+        val choices = IdentityHashMap<TreePath, TreeModel>()
+
         fun dispose() {
             Disposer.dispose(disposable)
             if (stickyPanel.parent === scrollPane) {
@@ -225,7 +281,7 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
     }
 
     private class StickyTreeOverlayLayout(
-        private val stickyPanel: StickyTreePanel
+        private val stickyPanel: StickyTreePanel,
     ) : ScrollPaneLayout() {
         override fun layoutContainer(parent: Container) {
             super.layoutContainer(parent)
@@ -236,7 +292,7 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
                 viewportBounds.x,
                 viewportBounds.y,
                 viewportBounds.width,
-                stickyHeight
+                stickyHeight,
             )
         }
     }

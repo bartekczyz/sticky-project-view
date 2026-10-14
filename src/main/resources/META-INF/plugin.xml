@@ -29,6 +29,7 @@
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last" />
             <action id="StickyProjectView.Toggle" class="info.chrzanowski.stickyprojectview.ToggleStickyProjectViewAction" />
             <action id="StickyProjectView.Configure" class="info.chrzanowski.stickyprojectview.ConfigureStickyProjectViewAction" />
+            <action id="StickyProjectView.NavigateAncestors" class="info.chrzanowski.stickyprojectview.NavigateStickyAncestorAction" />
         </group>
     </actions>
 </idea-plugin>

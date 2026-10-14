@@ -25,6 +25,8 @@ Choose **Sticky Project View → Configure Sticky Rows...**, or open **Settings 
 
 The integration suite checks repeated toggling and persistence across two IDEA launches sharing isolated configuration storage; each launch retains separate logs.
 
+Choose **Sticky Project View → Navigate Sticky Ancestors...** in Project View, or search for **Navigate Sticky Ancestors** in Find Action. Use arrow keys and Enter to reveal/select an ancestor; Escape cancels without changing selection and returns focus to the tree. Full paths distinguish duplicate names, and speed search filters the chooser. Assign a shortcut in **Settings → Keymap**; no default shortcut is imposed. The overlay itself never takes keyboard focus.
+
 ## Development
 
 Use Java 21 and the Gradle wrapper:

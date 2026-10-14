@@ -11,7 +11,8 @@ import com.intellij.openapi.util.Disposer
 class StickyProjectViewService(project: Project) : Disposable {
 
     private val controller = ProjectViewStickyController(project)
-    @Volatile private var disposed = false
+    @Volatile
+    private var disposed = false
 
     init {
         Disposer.register(this, controller)
@@ -26,7 +27,7 @@ class StickyProjectViewService(project: Project) : Disposable {
                         }
                     }
                 }
-            }
+            },
         )
     }
 
@@ -37,6 +38,15 @@ class StickyProjectViewService(project: Project) : Disposable {
 
     // Observations must not attach a pane or refresh the sticky calculation.
     fun isAttached() = controller.isAttached()
+
+    fun hasStickyAncestors() = controller.hasStickyAncestors()
+
+    fun stickyAncestors() = controller.stickyAncestors()
+
+    fun navigateToStickyAncestor(treePath: javax.swing.tree.TreePath): Boolean =
+        !disposed && StickyProjectViewSettings.getInstance().preferences.enabled && controller.navigateToStickyAncestor(treePath)
+
+    internal fun focusTree() = controller.focusTree()
 
     fun getStickyItemLabels() = controller.stickyItemLabels()
 

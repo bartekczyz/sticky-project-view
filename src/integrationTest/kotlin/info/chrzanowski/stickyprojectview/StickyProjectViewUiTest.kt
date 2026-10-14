@@ -173,6 +173,30 @@ class StickyProjectViewUiTest {
             val settings = service<StickyProjectViewSettingsRef>()
             val defaultHeight = stickyService.getStickyPanelHeight()
             val nativeTreeForSettings = cast(ideFrame().projectView().projectViewTree.component, ProjectTreeRef::class)
+            val chooserSelection = stickyService.getSelectedPathLabels()
+            invokeAction("StickyProjectView.NavigateAncestors", now = false)
+            ui.x("//div[@text='Sticky Ancestors']").waitFound()
+            ui.robot.pressAndReleaseKey(KeyEvent.VK_DOWN)
+            ui.robot.pressAndReleaseKey(KeyEvent.VK_ESCAPE)
+            waitFor("chooser cancellation restores tree focus", timeout = 10.seconds) {
+                withContext(OnDispatcher.EDT) { nativeTreeForSettings.isFocusOwner() }
+            }
+            assertEquals(chooserSelection, stickyService.getSelectedPathLabels())
+            invokeAction("StickyProjectView.NavigateAncestors", now = false)
+            ui.x("//div[@text='Sticky Ancestors']").waitFound()
+            repeat(actualStickyItems.size) { ui.robot.pressAndReleaseKey(KeyEvent.VK_UP) }
+            ui.robot.pressAndReleaseKey(KeyEvent.VK_DOWN)
+            ui.robot.pressAndReleaseKey(KeyEvent.VK_ENTER)
+            val chosenLabel = actualStickyItems[1]
+            val chosenPath = chooserSelection.take(chooserSelection.indexOf(chosenLabel) + 1)
+            waitFor("keyboard chooser selects exact second ancestor", timeout = 10.seconds) {
+                stickyService.getSelectedPathLabels() == chosenPath &&
+                    withContext(OnDispatcher.EDT) { nativeTreeForSettings.isFocusOwner() }
+            }
+            assertTrue(stickyService.selectPath(TARGET_FILE_PATH.toList()))
+            waitFor("restore stack after keyboard navigation", timeout = 10.seconds) {
+                stickyService.getStickyItemLabels().takeLast(expectedStickyItems.size) == expectedStickyItems
+            }
             val originalViewport = withContext(OnDispatcher.EDT) { nativeTreeForSettings.getVisibleRect() }
             try {
                 invokeAction("StickyProjectView.Configure", now = false)
@@ -395,6 +419,7 @@ class StickyProjectViewUiTest {
 
     @Remote("javax.swing.JTree")
     interface ProjectTreeRef {
+        fun isFocusOwner(): Boolean
         fun getVisibleRect(): Rectangle
         fun getRowBounds(row: Int): Rectangle
     }

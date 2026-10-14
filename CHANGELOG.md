@@ -4,6 +4,7 @@
 
 ## [Unreleased]
 
+- Add a keyboard-accessible sticky-ancestor chooser.
 - Allow configuring sticky content height between 10% and 90% of the viewport.
 - Add an IDE-wide, persistent Project View toggle for sticky rows.
 - Restore sticky-overlay mouse interactions and show full-path tooltips.
