@@ -30,10 +30,12 @@ class StickyTreeManager(
     private val scrollPane: JScrollPane,
     private val visualStickyItems: VisualStickyTreeItems,
     private val stickyPanel: StickyTreePanel,
-    parentDisposable: Disposable
+    parentDisposable: Disposable,
+    maxStickyHeightPercent: Int = 50,
 ) : TreeExpansionListener, Disposable {
 
     private var lastVisibleRect: Rectangle = Rectangle()
+    private var maxStickyHeightPercent = maxStickyHeightPercent.coerceIn(10, 90)
     private var observedModel: TreeModel = tree.model
     private var revealedStickyItem: RevealedStickyItem? = null
     private val viewportChangeListener = ChangeListener { recalculateAndRepaint(reason = "viewport") }
@@ -97,7 +99,7 @@ class StickyTreeManager(
             if (revealedPath == null) {
                 revealedStickyItem = null
             }
-            visualStickyItems.recalculate(visibleRect, revealedPath)
+            visualStickyItems.recalculate(visibleRect, revealedPath, maxStickyHeightPercent)
         }
         stickyPanel.repaintStickyItems()
         StickyTreeDebugLogger.logManagerEvent(
@@ -121,6 +123,13 @@ class StickyTreeManager(
     fun forceUpdate() {
         lastVisibleRect = Rectangle()
         recalculateAndRepaint(forceRecalculate = true, reason = "forceUpdate")
+    }
+
+    fun setMaxStickyHeightPercent(percent: Int) {
+        val normalized = percent.coerceIn(10, 90)
+        if (maxStickyHeightPercent == normalized) return
+        maxStickyHeightPercent = normalized
+        forceUpdate()
     }
 
     fun navigateTo(stickyItem: StickyTreeItem, originalX: Int = scrollPane.viewport.viewPosition.x) {
@@ -195,7 +204,7 @@ class StickyTreeManager(
 
     private fun previewStickyHeight(viewportRect: Rectangle, targetY: Int, revealedPath: TreePath): Int {
         val previewItems = VisualStickyTreeItems(tree)
-        previewItems.recalculate(Rectangle(viewportRect).apply { y = targetY }, revealedPath)
+        previewItems.recalculate(Rectangle(viewportRect).apply { y = targetY }, revealedPath, maxStickyHeightPercent)
         return previewItems.height()
     }
 

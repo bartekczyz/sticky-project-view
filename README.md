@@ -21,6 +21,8 @@ It keeps expanded parent directories pinned at the top while you scroll and pres
 
 In the Project View context menu, choose **Sticky Project View → Enable Sticky Rows** to toggle sticky rows. This IDE-wide preference applies to every open project and survives restart. Disabling removes the overlay and restores the native scroll-pane layout.
 
+Choose **Sticky Project View → Configure Sticky Rows...**, or open **Settings → Tools → Sticky Project View**, to set the maximum sticky content height to **10%–90% of the viewport** (default **50%**). Apply updates every open project immediately, without scrolling. The budget excludes the separator/shadow and retains a row margin for the native tree below the stack; Reset restores the currently saved preferences.
+
 The integration suite checks repeated toggling and persistence across two IDEA launches sharing isolated configuration storage; each launch retains separate logs.
 
 ## Development

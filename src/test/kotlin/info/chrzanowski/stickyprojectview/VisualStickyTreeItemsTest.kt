@@ -17,6 +17,64 @@ import javax.swing.tree.DefaultMutableTreeNode
 class VisualStickyTreeItemsTest {
 
     @Test
+    fun `height percentage retains row margin across tiny odd and resized viewports`() {
+        runOnEdt {
+            val root = treeNode("root")
+            var node = root
+            repeat(8) { index ->
+                val child = treeNode("directory$index")
+                node.add(child)
+                node = child
+            }
+            repeat(40) { node.add(treeNode("file$it")) }
+            val tree = JTree(root).applyTreeDefaults()
+            var row = 0
+            while (row < tree.rowCount) tree.expandRow(row++)
+            val items = VisualStickyTreeItems(tree)
+            val rect = Rectangle(0, 220, 200, 201)
+            items.recalculate(rect)
+            val defaultItems = items.items().toList()
+            items.recalculate(rect, maxStickyHeightPercent = 50)
+            assertEquals(defaultItems, items.items())
+            assertEquals(80, items.height())
+            items.recalculate(rect, maxStickyHeightPercent = 10)
+            assertEquals(0, items.height())
+            items.recalculate(rect, maxStickyHeightPercent = -1)
+            assertEquals(0, items.height())
+            items.recalculate(rect, maxStickyHeightPercent = 90)
+            assertEquals(160, items.height())
+            items.recalculate(rect, maxStickyHeightPercent = 100)
+            assertEquals(160, items.height())
+            items.recalculate(Rectangle(rect).apply { height = 39 }, maxStickyHeightPercent = 90)
+            assertEquals(0, items.height())
+            items.recalculate(Rectangle(rect).apply { height = 101 }, maxStickyHeightPercent = 90)
+            assertEquals(60, items.height())
+
+            val pane = JScrollPane(tree)
+            pane.viewport.extentSize = java.awt.Dimension(200, 201)
+            pane.viewport.viewPosition = Point(0, 220)
+            val panel = StickyTreePanel(tree, items)
+            val manager = StickyTreeManager(tree, pane, items, panel, DisposableStub())
+            try {
+                manager.forceUpdate()
+                assertEquals(80, panel.stickyContentHeight())
+                manager.setMaxStickyHeightPercent(90)
+                assertEquals(220, pane.viewport.viewPosition.y)
+                assertEquals(160, panel.stickyContentHeight())
+                val target = items.items().last()
+                manager.navigateTo(target)
+                assertEquals(tree.getPathBounds(target.treePath).y, pane.viewport.viewPosition.y + items.height())
+                val preview = VisualStickyTreeItems(tree)
+                preview.recalculate(pane.viewport.viewRect, target.treePath, 90)
+                assertEquals(preview.items(), items.items())
+                assertEquals(preview.height(), panel.stickyContentHeight())
+            } finally {
+                manager.dispose()
+            }
+        }
+    }
+
+    @Test
     fun `scrolled sticky painting matches native row even beyond unscrolled viewport width`() {
         runOnEdt {
             val marker = Color.MAGENTA
@@ -137,11 +195,12 @@ class VisualStickyTreeItemsTest {
             )
             val stickyItems = VisualStickyTreeItems(tree)
 
-            stickyItems.recalculate(Rectangle(0, 21, 200, 120))
-
-            assertEquals(listOf("parent"), stickyItems.items().map(::labelOf))
-            assertEquals(listOf(-1), stickyItems.items().map(StickyTreeItem::yLocation))
-            assertEquals(19, stickyItems.height())
+            for (percent in listOf(10, 50, 90)) {
+                stickyItems.recalculate(Rectangle(0, 21, 200, 401), maxStickyHeightPercent = percent)
+                assertEquals(listOf("parent"), stickyItems.items().map(::labelOf))
+                assertEquals(listOf(-1), stickyItems.items().map(StickyTreeItem::yLocation))
+                assertEquals(19, stickyItems.height())
+            }
         }
     }
 

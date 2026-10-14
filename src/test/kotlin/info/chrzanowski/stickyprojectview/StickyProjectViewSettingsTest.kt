@@ -14,6 +14,51 @@ import javax.swing.JScrollPane
 import javax.swing.JTree
 
 class StickyProjectViewSettingsTest : BasePlatformTestCase() {
+    fun testConfigurableApplyResetPublishesCombinedUpdate() {
+        val settings = StickyProjectViewSettings.getInstance()
+        val original = settings.preferences
+        val configurable = StickyProjectViewConfigurable()
+        val owner = Disposer.newDisposable()
+        val snapshots = mutableListOf<StickyProjectViewPreferences>()
+        ApplicationManager.getApplication().messageBus.connect(owner).subscribe(
+            StickyProjectViewSettingsListener.TOPIC,
+            object : StickyProjectViewSettingsListener {
+                override fun settingsChanged(preferences: StickyProjectViewPreferences) { snapshots.add(preferences) }
+            },
+        )
+        try {
+            settings.updatePreferences(StickyProjectViewPreferences(true, 50))
+            val component = requireNotNull(configurable.createComponent())
+            configurable.reset()
+            fun descendants(container: java.awt.Container): List<java.awt.Component> =
+                container.components.flatMap { listOf(it) + if (it is java.awt.Container) descendants(it) else emptyList() }
+            val controls = descendants(component)
+            val checkbox = controls.filterIsInstance<javax.swing.JCheckBox>().single()
+            val spinner = controls.filterIsInstance<javax.swing.JSpinner>().single()
+            checkbox.isSelected = false
+            spinner.value = 90
+            assertTrue(configurable.isModified)
+            assertEquals(StickyProjectViewPreferences(true, 50), settings.preferences)
+            snapshots.clear()
+            configurable.apply()
+            assertEquals(listOf(StickyProjectViewPreferences(false, 90)), snapshots)
+            assertFalse(configurable.isModified)
+            checkbox.isSelected = true
+            spinner.value = 10
+            configurable.reset()
+            assertFalse(checkbox.isSelected)
+            assertEquals(90, spinner.value)
+            assertFalse(configurable.isModified)
+            configurable.apply()
+            assertSize(1, snapshots)
+        } finally {
+            configurable.disposeUIResources()
+            Disposer.dispose(owner)
+            settings.updatePreferences(original)
+            UIUtil.dispatchAllInvocationEvents()
+        }
+    }
+
     fun testDefaultsSerializationAndBounds() {
         val settings = StickyProjectViewSettings()
         assertEquals(StickyProjectViewPreferences(), settings.preferences)

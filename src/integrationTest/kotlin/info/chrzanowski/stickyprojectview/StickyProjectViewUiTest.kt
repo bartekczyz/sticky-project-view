@@ -168,6 +168,46 @@ class StickyProjectViewUiTest {
             assertEquals(expectedStickyItems, actualStickyItems.takeLast(expectedStickyItems.size))
             assertTrue(stickyService.getStickyPanelHeight() > 0)
 
+            val settings = service<StickyProjectViewSettingsRef>()
+            val defaultHeight = stickyService.getStickyPanelHeight()
+            val nativeTreeForSettings = cast(ideFrame().projectView().projectViewTree.component, ProjectTreeRef::class)
+            val originalViewport = withContext(OnDispatcher.EDT) { nativeTreeForSettings.getVisibleRect() }
+            try {
+                invokeAction("StickyProjectView.Configure", now = false)
+                val spinnerComponent = ui.x { byType("javax.swing.JSpinner") }.waitFound()
+                val spinner = cast(spinnerComponent.component, SpinnerRef::class)
+                assertEquals(50, withContext(OnDispatcher.EDT) { spinner.getValue() })
+                withContext(OnDispatcher.EDT) { spinner.setValue(10) }
+                spinnerComponent.click(Point(20, 10))
+                ui.robot.pressAndReleaseKey(KeyEvent.VK_TAB)
+                val applyButton = ui.x("//div[@text='Apply']").waitFound()
+                val nativeApply = cast(applyButton.component, ButtonRef::class)
+                waitFor("Settings enables Apply after editing", timeout = 10.seconds) {
+                    withContext(OnDispatcher.EDT) { nativeApply.isEnabled() }
+                }
+                applyButton.click()
+                waitFor("height Apply updates the existing overlay without scrolling", timeout = 10.seconds) {
+                    settings.getPreferences().component2() == 10 && stickyService.getStickyPanelHeight() < defaultHeight
+                }
+                assertEquals(originalViewport, withContext(OnDispatcher.EDT) { nativeTreeForSettings.getVisibleRect() })
+                withContext(OnDispatcher.EDT) { spinner.setValue(90) }
+                spinnerComponent.click(Point(20, 10))
+                ui.robot.pressAndReleaseKey(KeyEvent.VK_TAB)
+                ui.x("//div[@text='Revert changes']").waitFound().click()
+                waitFor("Reset restores the applied height", timeout = 10.seconds) {
+                    withContext(OnDispatcher.EDT) { spinner.getValue() } == 10
+                }
+                withContext(OnDispatcher.EDT) { spinner.setValue(50) }
+                spinnerComponent.click(Point(20, 10))
+                ui.robot.pressAndReleaseKey(KeyEvent.VK_TAB)
+                ui.x("//div[@text='OK']").waitFound().click()
+                waitFor("default budget restored", timeout = 10.seconds) {
+                    settings.getPreferences().component2() == 50 && stickyService.getStickyPanelHeight() == defaultHeight
+                }
+            } finally {
+                settings.updatePreferences(new(StickyProjectViewPreferencesRef::class, true, 50))
+            }
+
             val nextFilePath = TARGET_DIRECTORY_PATH + "DeepFile121.txt"
             assertTrue(stickyService.selectPath(nextFilePath.toList()))
             waitFor("sticky stack after changing selection", timeout = 30.seconds) {
@@ -265,6 +305,18 @@ class StickyProjectViewUiTest {
     @Remote("info.chrzanowski.stickyprojectview.StickyProjectViewPreferences", plugin = "sticky-project-view")
     interface StickyProjectViewPreferencesRef {
         fun component1(): Boolean
+        fun component2(): Int
+    }
+
+    @Remote("javax.swing.JSpinner")
+    interface SpinnerRef {
+        fun getValue(): Int
+        fun setValue(value: Any)
+    }
+
+    @Remote("javax.swing.JButton")
+    interface ButtonRef {
+        fun isEnabled(): Boolean
     }
 
     @Remote("info.chrzanowski.stickyprojectview.StickyProjectViewSettings", plugin = "sticky-project-view")

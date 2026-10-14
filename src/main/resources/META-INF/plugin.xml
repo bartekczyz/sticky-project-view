@@ -20,11 +20,15 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <postStartupActivity implementation="info.chrzanowski.stickyprojectview.ProjectViewStickyTreeDecorator" />
+        <applicationConfigurable parentId="tools" id="StickyProjectView.Settings"
+                                 instance="info.chrzanowski.stickyprojectview.StickyProjectViewConfigurable"
+                                 bundle="messages.StickyProjectViewBundle" key="settings.displayName" />
     </extensions>
     <actions>
         <group id="StickyProjectView.Group" popup="true">
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last" />
             <action id="StickyProjectView.Toggle" class="info.chrzanowski.stickyprojectview.ToggleStickyProjectViewAction" />
+            <action id="StickyProjectView.Configure" class="info.chrzanowski.stickyprojectview.ConfigureStickyProjectViewAction" />
         </group>
     </actions>
 </idea-plugin>

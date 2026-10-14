@@ -23,6 +23,7 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
 
     private var attachment: StickyTreeAttachment? = null
     private var enabled = true
+    private var maxStickyHeightPercent = 50
     private var initialized = false
     private var disposed = false
 
@@ -49,7 +50,9 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
     fun applyPreferences(preferences: StickyProjectViewPreferences) = onEdt {
         if (disposed || project.isDisposed) return@onEdt
         enabled = preferences.enabled
+        maxStickyHeightPercent = preferences.maxStickyHeightPercent.coerceIn(10, 90)
         if (!enabled) detach()
+        else if (attachment != null) attachment?.manager?.setMaxStickyHeightPercent(maxStickyHeightPercent)
         else if (initialized) attachToPane(currentPane())
     }
 
@@ -129,7 +132,7 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
         val visualStickyItems = VisualStickyTreeItems(tree)
         lateinit var stickyManager: StickyTreeManager
         val stickyPanel = StickyTreePanel(tree, visualStickyItems)
-        stickyManager = StickyTreeManager(tree, scrollPane, visualStickyItems, stickyPanel, attachmentDisposable)
+        stickyManager = StickyTreeManager(tree, scrollPane, visualStickyItems, stickyPanel, attachmentDisposable, maxStickyHeightPercent)
         Disposer.register(attachmentDisposable, StickyTreeInputRouter(tree, stickyPanel) { item, originalX ->
             stickyManager.navigateTo(item, originalX)
         })

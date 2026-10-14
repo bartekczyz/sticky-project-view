@@ -16,8 +16,9 @@ class VisualStickyTreeItems(private val tree: JTree) {
     /**
      * Recalculates which tree items should be sticky based on the current viewport
      */
-    fun recalculate(visibleRect: Rectangle, revealedPath: TreePath? = null) {
+    fun recalculate(visibleRect: Rectangle, revealedPath: TreePath? = null, maxStickyHeightPercent: Int = 50) {
         clear()
+        val contentBudget = (visibleRect.height.toLong() * maxStickyHeightPercent.coerceIn(10, 90) / 100).toInt()
         val steps = mutableListOf<String>()
 
         if (visibleRect.isEmpty || tree.rowCount == 0) {
@@ -75,7 +76,7 @@ class VisualStickyTreeItems(private val tree: JTree) {
                     isDescendantOf(revealedPath, stickyPath) &&
                     rowBounds.y == lookupTop
             if ((rowBounds.y > lookupTop || rowBounds.y == lookupTop && !keepsRevealedItemBelowStack) ||
-                isPanelTooBig(rowHeight, panelHeight, visibleRect.height)
+                isPanelTooBig(rowHeight, panelHeight, contentBudget)
             ) {
                 steps += "stop rowNotAboveOrPanelTooBig depth=$stickyDepth candidate=${StickyTreeDebugLogger.pathText(stickyPath)} rowBounds=${StickyTreeDebugLogger.rect(rowBounds)} lookupTop=$lookupTop panelHeight=$panelHeight rowHeight=$rowHeight viewportHeight=${visibleRect.height}"
                 break
@@ -101,7 +102,7 @@ class VisualStickyTreeItems(private val tree: JTree) {
             panelHeight += visibleHeight
             stickyDepth += 1
 
-            if (overlap > 0 || isPanelTooBig(rowHeight, panelHeight, visibleRect.height)) {
+            if (overlap > 0 || isPanelTooBig(rowHeight, panelHeight, contentBudget)) {
                 steps += "stop handoffOrPanelTooBig overlap=$overlap panelHeight=$panelHeight rowHeight=$rowHeight viewportHeight=${visibleRect.height}"
                 break
             }
@@ -192,6 +193,6 @@ class VisualStickyTreeItems(private val tree: JTree) {
         return if (fallback >= 0) fallback else rowCount - 1
     }
 
-    private fun isPanelTooBig(itemHeight: Int, panelHeight: Int, viewportHeight: Int) =
-        panelHeight + 2 * itemHeight > viewportHeight / 2
+    private fun isPanelTooBig(itemHeight: Int, panelHeight: Int, contentBudget: Int) =
+        panelHeight + 2 * itemHeight > contentBudget
 }
