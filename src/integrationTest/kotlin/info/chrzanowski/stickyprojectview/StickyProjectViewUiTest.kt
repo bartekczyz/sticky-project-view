@@ -4,6 +4,7 @@ import com.intellij.driver.client.Remote
 import com.intellij.driver.client.service
 import com.intellij.driver.model.OnDispatcher
 import com.intellij.driver.sdk.singleProject
+import com.intellij.driver.sdk.invokeAction
 import com.intellij.driver.sdk.ui.components.UiComponent.Companion.waitFound
 import com.intellij.driver.sdk.ui.components.common.ideFrame
 import com.intellij.driver.sdk.ui.components.common.toolwindows.projectView
@@ -62,6 +63,52 @@ class StickyProjectViewUiTest {
     fun assertNoIdeFailures() {
         di = originalDi
         ciServer.assertNoFailures()
+    }
+
+    @Test
+    fun togglePersistsAcrossRestart(@TempDir temporaryDirectory: Path) {
+        val projectDir = temporaryDirectory.resolve(PROJECT_NAME).createDirectories()
+        createProjectStructure(projectDir)
+        val context = Starter.newContext(
+            "${CurrentTestMethod.hyphenateWithClass()}-${UUID.randomUUID()}",
+            TestCase(IdeProductProvider.IU, LocalProjectInfo(projectDir, isReusable = true)).withVersion(platformVersion)
+        ).apply {
+            PluginConfigurator(this).installPluginFromPath(pluginPath)
+        }
+        context.runIdeWithDriver(runTimeout = 3.minutes, launchName = "disable").useDriverAndCloseIde {
+            waitForProjectOpen()
+            waitForIndicators(2.minutes)
+            assertEquals(platformVersion, service<ApplicationInfoRef>().getFullVersion())
+            println("Toggle baseline: ${service<ApplicationInfoRef>().getBuild().asString()}")
+            ideFrame { leftToolWindowToolbar.projectButton.open() }
+            val sticky = service<StickyProjectViewServiceRef>(singleProject())
+            waitFor("initial attachment", timeout = 10.seconds) { sticky.isAttached() }
+            repeat(3) {
+                invokeAction("StickyProjectView.Toggle")
+                waitFor("disabled overlay", timeout = 10.seconds) { !sticky.isAttached() && sticky.getStickyPanelHeight() == 0 }
+                invokeAction("StickyProjectView.Toggle")
+                waitFor("enabled overlay", timeout = 10.seconds) { sticky.isAttached() }
+            }
+            invokeAction("StickyProjectView.Toggle")
+            waitFor("disabled before restart", timeout = 10.seconds) { !sticky.isAttached() }
+        }
+        context.runIdeWithDriver(runTimeout = 3.minutes, launchName = "restart-disabled").useDriverAndCloseIde {
+            waitForProjectOpen()
+            waitForIndicators(2.minutes)
+            assertEquals(platformVersion, service<ApplicationInfoRef>().getFullVersion())
+            println("Restart baseline: ${service<ApplicationInfoRef>().getBuild().asString()}")
+            assertTrue(!service<StickyProjectViewSettingsRef>().getPreferences().component1(), "Restart must load disabled state from storage")
+            val sticky = service<StickyProjectViewServiceRef>(singleProject())
+            sticky.initialize()
+            assertTrue(!sticky.isAttached(), "Restart must retain the disabled preference")
+            try {
+                invokeAction("StickyProjectView.Toggle")
+                waitFor("reenabled after restart", timeout = 10.seconds) { sticky.isAttached() }
+            } finally {
+                // This isolated config must finish with the default enabled state.
+                service<StickyProjectViewSettingsRef>().updatePreferences(new(StickyProjectViewPreferencesRef::class, true, 50))
+            }
+        }
     }
 
     @Test
@@ -215,8 +262,20 @@ class StickyProjectViewUiTest {
         }
     }
 
+    @Remote("info.chrzanowski.stickyprojectview.StickyProjectViewPreferences", plugin = "sticky-project-view")
+    interface StickyProjectViewPreferencesRef {
+        fun component1(): Boolean
+    }
+
+    @Remote("info.chrzanowski.stickyprojectview.StickyProjectViewSettings", plugin = "sticky-project-view")
+    interface StickyProjectViewSettingsRef {
+        fun getPreferences(): StickyProjectViewPreferencesRef
+        fun updatePreferences(preferences: StickyProjectViewPreferencesRef)
+    }
+
     @Remote("info.chrzanowski.stickyprojectview.StickyProjectViewService", plugin = "sticky-project-view")
     interface StickyProjectViewServiceRef {
+        fun initialize()
         fun isAttached(): Boolean
         fun getStickyItemLabels(): List<String>
         fun getStickyPanelHeight(): Int

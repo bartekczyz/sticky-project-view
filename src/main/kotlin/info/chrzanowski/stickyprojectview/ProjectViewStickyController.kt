@@ -22,23 +22,35 @@ import javax.swing.SwingUtilities
 class ProjectViewStickyController(private val project: Project) : Disposable {
 
     private var attachment: StickyTreeAttachment? = null
+    private var enabled = true
+    private var initialized = false
+    private var disposed = false
 
     init {
         project.messageBus.connect(this).subscribe(
             ProjectViewListener.TOPIC,
             object : ProjectViewListener {
                 override fun paneShown(current: AbstractProjectViewPane, previous: AbstractProjectViewPane?) {
-                    attachToPane(current)
+                    onEdt { attachToPane(current) }
                 }
             }
         )
     }
 
-    fun initialize() {
+    fun initialize() = onEdt {
+        if (disposed || project.isDisposed) return@onEdt
+        initialized = true
         currentPane()?.let {
             StickyTreeDebugLogger.logAttachment(it.tree, "initialize")
             attachToPane(it)
         }
+    }
+
+    fun applyPreferences(preferences: StickyProjectViewPreferences) = onEdt {
+        if (disposed || project.isDisposed) return@onEdt
+        enabled = preferences.enabled
+        if (!enabled) detach()
+        else if (initialized) attachToPane(currentPane())
     }
 
     fun isAttached() = withAttachment(false) { true }
@@ -80,11 +92,13 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
         }
     }
 
-    override fun dispose() {
+    override fun dispose() = onEdt {
+        disposed = true
         detach()
     }
 
     private fun attachToPane(pane: AbstractProjectViewPane?) {
+        if (disposed || project.isDisposed || !enabled || !initialized) return
         val tree = pane?.tree ?: run {
             detach()
             return
@@ -94,8 +108,15 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
             return
         }
 
+        attachToTree(tree, scrollPane)
+    }
+
+    internal fun attachToTree(tree: JTree, scrollPane: JScrollPane) {
+        check(SwingUtilities.isEventDispatchThread())
+        if (disposed || project.isDisposed || !enabled || !initialized) return
+
         val currentAttachment = attachment
-        if (currentAttachment?.tree === tree) {
+        if (currentAttachment?.tree === tree && currentAttachment.scrollPane === scrollPane) {
             StickyTreeDebugLogger.logAttachment(tree, "reuse")
             currentAttachment.manager.forceUpdate()
             return

@@ -17,6 +17,12 @@ It keeps expanded parent directories pinned at the top while you scroll and pres
 - Shows full file/directory paths on hover (logical ancestor chains for non-file nodes). Single-click label navigation waits for the double-click interval so it does not interfere with native gestures.
 - Includes unit, rendering, and UI integration tests.
 
+## Controls
+
+In the Project View context menu, choose **Sticky Project View → Enable Sticky Rows** to toggle sticky rows. This IDE-wide preference applies to every open project and survives restart. Disabling removes the overlay and restores the native scroll-pane layout.
+
+The integration suite checks repeated toggling and persistence across two IDEA launches sharing isolated configuration storage; each launch retains separate logs.
+
 ## Development
 
 Use Java 21 and the Gradle wrapper:

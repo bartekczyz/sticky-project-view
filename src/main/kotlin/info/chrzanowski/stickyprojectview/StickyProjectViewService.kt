@@ -2,6 +2,7 @@
 package info.chrzanowski.stickyprojectview
 
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
@@ -10,12 +11,29 @@ import com.intellij.openapi.util.Disposer
 class StickyProjectViewService(project: Project) : Disposable {
 
     private val controller = ProjectViewStickyController(project)
+    @Volatile private var disposed = false
 
     init {
         Disposer.register(this, controller)
+        val application = ApplicationManager.getApplication()
+        application.messageBus.connect(this).subscribe(
+            StickyProjectViewSettingsListener.TOPIC,
+            object : StickyProjectViewSettingsListener {
+                override fun settingsChanged(preferences: StickyProjectViewPreferences) {
+                    application.invokeLater {
+                        if (!project.isDisposed && !disposed) {
+                            controller.applyPreferences(StickyProjectViewSettings.getInstance().preferences)
+                        }
+                    }
+                }
+            }
+        )
     }
 
-    fun initialize() = controller.initialize()
+    fun initialize() {
+        controller.applyPreferences(StickyProjectViewSettings.getInstance().preferences)
+        controller.initialize()
+    }
 
     // Observations must not attach a pane or refresh the sticky calculation.
     fun isAttached() = controller.isAttached()
@@ -30,5 +48,7 @@ class StickyProjectViewService(project: Project) : Disposable {
 
     fun selectPath(pathSegments: List<String>) = controller.selectPath(pathSegments)
 
-    override fun dispose() = Unit
+    override fun dispose() {
+        disposed = true
+    }
 }

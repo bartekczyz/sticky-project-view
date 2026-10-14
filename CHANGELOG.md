@@ -4,6 +4,7 @@
 
 ## [Unreleased]
 
+- Add an IDE-wide, persistent Project View toggle for sticky rows.
 - Restore sticky-overlay mouse interactions and show full-path tooltips.
 - Fix horizontally scrolled sticky rows and stale rows after selection changes.
 - Run Starter/Driver UI tests against the configured IDEA 2025.3 baseline.
