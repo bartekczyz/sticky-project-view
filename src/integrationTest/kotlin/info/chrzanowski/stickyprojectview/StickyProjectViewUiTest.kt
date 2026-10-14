@@ -2,10 +2,12 @@ package info.chrzanowski.stickyprojectview
 
 import com.intellij.driver.client.Remote
 import com.intellij.driver.client.service
+import com.intellij.driver.model.OnDispatcher
 import com.intellij.driver.sdk.singleProject
 import com.intellij.driver.sdk.ui.components.UiComponent.Companion.waitFound
 import com.intellij.driver.sdk.ui.components.common.ideFrame
 import com.intellij.driver.sdk.ui.components.common.toolwindows.projectView
+import com.intellij.driver.sdk.ui.ui
 import com.intellij.driver.sdk.waitFor
 import com.intellij.driver.sdk.waitForIndicators
 import com.intellij.driver.sdk.waitForProjectOpen
@@ -28,6 +30,9 @@ import org.junit.jupiter.api.io.TempDir
 import org.kodein.di.DI
 import org.kodein.di.bindSingleton
 import java.nio.file.Path
+import java.awt.Rectangle
+import java.awt.Point
+import java.awt.event.KeyEvent
 import java.util.UUID
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
@@ -126,6 +131,62 @@ class StickyProjectViewUiTest {
                 assertEquals(expectedStickyItems, stickyService.getStickyItemLabels().takeLast(expectedStickyItems.size))
                 assertEquals(panelHeightAfterSelection, stickyService.getStickyPanelHeight())
             }
+
+            val overlay = ui.x { byType("info.chrzanowski.stickyprojectview.StickyTreePanel") }.waitFound()
+            val treeComponent = ideFrame().projectView().projectViewTree
+            val nativeTree = cast(treeComponent.component, ProjectTreeRef::class)
+            fun deeperPoint(): Point {
+                val labels = stickyService.getStickyItemLabels()
+                val bounds = withContext(OnDispatcher.EDT) {
+                    nativeTree.getRowBounds(stickyService.getVisibleRowLabels().indexOf("deeper"))
+                }
+                return Point(bounds.x + bounds.width / 2 - withContext(OnDispatcher.EDT) { nativeTree.getVisibleRect().x },
+                    labels.indexOf("deeper") * bounds.height + bounds.height / 2)
+            }
+            overlay.moveMouse(deeperPoint())
+            ui.x("//div[contains(@text, '/src/main/kotlin/demo/nested/deeper')]").waitFound()
+                .waitAnyTextsContains(projectDir.resolve(TARGET_DIRECTORY_PATH.joinToString("/")).toString())
+
+            overlay.rightClick(deeperPoint())
+            val popup = ui.x { byType("javax.swing.JPopupMenu") }.waitFound()
+            assertEquals(listOf(PROJECT_NAME) + TARGET_DIRECTORY_PATH, stickyService.getSelectedPathLabels())
+            val popupLocation = popup.getLocationOnScreen()
+            val overlayLocation = overlay.getLocationOnScreen()
+            assertTrue(popupLocation.y >= overlayLocation.y && popupLocation.y <= overlayLocation.y + stickyService.getStickyPanelHeight(),
+                "Popup must be anchored in the overlay, not at its offscreen native row")
+            ui.robot.pressAndReleaseKey(KeyEvent.VK_ESCAPE)
+            waitFor("context menu closes before wheel interaction", timeout = 10.seconds) { popup.notPresent() }
+
+            assertTrue(stickyService.selectPath(nextFilePath.toList()))
+            overlay.doubleClick(deeperPoint())
+            waitFor("native double click collapses the sticky directory", timeout = 10.seconds) {
+                "DeepFile120.txt" !in stickyService.getVisibleRowLabels()
+            }
+
+            assertTrue(stickyService.selectPath(nextFilePath.toList()))
+            overlay.click(deeperPoint())
+            waitFor("completed sticky label click reveals the exact ancestor", timeout = 10.seconds) {
+                stickyService.getSelectedPathLabels() == listOf(PROJECT_NAME) + TARGET_DIRECTORY_PATH &&
+                    stickyService.getStickyItemLabels().lastOrNull() == "nested"
+            }
+            assertTrue(stickyService.selectPath(TARGET_FILE_PATH.toList()))
+            waitFor("selection clears the revealed ancestor exception", timeout = 10.seconds) {
+                stickyService.getStickyItemLabels().takeLast(expectedStickyItems.size) == expectedStickyItems
+            }
+            val beforeNativeWheel = withContext(OnDispatcher.EDT) { nativeTree.getVisibleRect().y }
+            treeComponent.moveMouse(Point(150, beforeNativeWheel + stickyService.getStickyPanelHeight() + 80))
+            ui.robot.rotateMouseWheel(-3)
+            waitFor("native wheel control outside the overlay", timeout = 10.seconds) {
+                withContext(OnDispatcher.EDT) { nativeTree.getVisibleRect().y } < beforeNativeWheel
+            }
+            assertTrue(stickyService.selectPath(TARGET_FILE_PATH.toList()))
+            val beforeWheel = withContext(OnDispatcher.EDT) { nativeTree.getVisibleRect().y }
+            assertTrue(beforeWheel > 0, "Wheel scenario must start in a vertically scrolled viewport")
+            overlay.moveMouse(deeperPoint())
+            ui.robot.rotateMouseWheel(-3)
+            waitFor("wheel over sticky rows scrolls the native viewport", timeout = 10.seconds) {
+                withContext(OnDispatcher.EDT) { nativeTree.getVisibleRect().y } < beforeWheel
+            }
         }
     }
 
@@ -165,6 +226,12 @@ class StickyProjectViewUiTest {
     @Remote("com.intellij.openapi.util.BuildNumber")
     interface BuildNumberRef {
         fun asString(): String
+    }
+
+    @Remote("javax.swing.JTree")
+    interface ProjectTreeRef {
+        fun getVisibleRect(): Rectangle
+        fun getRowBounds(row: Int): Rectangle
     }
 
     private companion object {

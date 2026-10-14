@@ -309,12 +309,21 @@ class VisualStickyTreeItemsTest {
                 viewport.viewPosition = Point(0, 21)
             }
             lateinit var manager: StickyTreeManager
-            val stickyPanel = StickyTreePanel(tree, stickyItems) { manager.navigateTo(it) }
+            val stickyPanel = StickyTreePanel(tree, stickyItems)
             manager = StickyTreeManager(tree, scrollPane, stickyItems, stickyPanel, DisposableStub())
+            val router = StickyTreeInputRouter(tree, stickyPanel) { item, x -> manager.navigateTo(item, x) }
 
             manager.forceUpdate()
             stickyPanel.setSize(200, stickyItems.height())
             assertEquals(listOf("parent", "child"), stickyItems.items().map(::labelOf))
+
+            var clicks = 0
+            val gesturePanel = StickyTreePanel(tree, stickyItems)
+            val gestureRouter = StickyTreeInputRouter(tree, gesturePanel) { _, _ -> clicks++ }
+            gesturePanel.repaintStickyItems()
+            gesturePanel.dispatchEvent(MouseEvent(gesturePanel, MouseEvent.MOUSE_PRESSED, 1, 0, 50, 25, 1, false, MouseEvent.BUTTON1))
+            assertEquals("press must not reveal before a gesture completes", 0, clicks)
+            gestureRouter.dispose()
 
             stickyPanel.dispatchEvent(
                 MouseEvent(
@@ -330,11 +339,17 @@ class VisualStickyTreeItemsTest {
                 )
             )
 
+            stickyPanel.dispatchEvent(MouseEvent(stickyPanel, MouseEvent.MOUSE_RELEASED,
+                System.currentTimeMillis(), 0, 50, 25, 1, false, MouseEvent.BUTTON1))
+            val loop = java.awt.Toolkit.getDefaultToolkit().systemEventQueue.createSecondaryLoop()
+            javax.swing.Timer(700) { loop.exit() }.apply { isRepeats = false; start() }
+            loop.enter()
             assertEquals("child", tree.selectionPath.lastPathComponent.toString())
             assertEquals(listOf("parent"), stickyItems.items().map(::labelOf))
             val childBounds = tree.getRowBounds(tree.getRowForPath(tree.selectionPath))
             assertEquals(stickyPanel.stickyContentHeight(), childBounds.y - scrollPane.viewport.viewPosition.y)
 
+            router.dispose()
             manager.dispose()
         }
     }

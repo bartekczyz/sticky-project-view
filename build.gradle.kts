@@ -27,6 +27,7 @@ val integrationTestRuntimeOnly by configurations.getting {
 // Dependencies are managed with Gradle version catalog - read more: https://docs.gradle.org/current/userguide/platforms.html#sub:version-catalog
 dependencies {
     testImplementation("junit:junit:4.13.2")
+    testRuntimeOnly("org.opentest4j:opentest4j:1.3.0")
     integrationTestImplementation(platform("org.junit:junit-bom:5.10.3"))
     integrationTestImplementation("org.junit.jupiter:junit-jupiter")
     integrationTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.10.1")

@@ -107,8 +107,11 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
         val attachmentDisposable = Disposer.newDisposable()
         val visualStickyItems = VisualStickyTreeItems(tree)
         lateinit var stickyManager: StickyTreeManager
-        val stickyPanel = StickyTreePanel(tree, visualStickyItems) { stickyManager.navigateTo(it) }
+        val stickyPanel = StickyTreePanel(tree, visualStickyItems)
         stickyManager = StickyTreeManager(tree, scrollPane, visualStickyItems, stickyPanel, attachmentDisposable)
+        Disposer.register(attachmentDisposable, StickyTreeInputRouter(tree, stickyPanel) { item, originalX ->
+            stickyManager.navigateTo(item, originalX)
+        })
 
         val originalLayout = installStickyPanel(scrollPane, stickyPanel)
 

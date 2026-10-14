@@ -123,8 +123,7 @@ class StickyTreeManager(
         recalculateAndRepaint(forceRecalculate = true, reason = "forceUpdate")
     }
 
-    fun navigateTo(stickyItem: StickyTreeItem) {
-        val originalX = scrollPane.viewport.viewPosition.x
+    fun navigateTo(stickyItem: StickyTreeItem, originalX: Int = scrollPane.viewport.viewPosition.x) {
         val row = tree.getRowForPath(stickyItem.treePath).takeIf { it >= 0 } ?: return
         val rowBounds = tree.getRowBounds(row) ?: return
         val targetY = navigationTargetY(stickyItem.treePath, rowBounds, currentViewportRect())

@@ -9,7 +9,6 @@ import java.awt.Dimension
 import java.awt.GradientPaint
 import java.awt.Graphics
 import java.awt.Graphics2D
-import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import javax.swing.JTree
 import javax.swing.JViewport
@@ -22,8 +21,7 @@ import kotlin.math.roundToInt
  */
 class StickyTreePanel(
     private val tree: JTree,
-    private val visualStickyItems: VisualStickyTreeItems,
-    private val onItemClick: (StickyTreeItem) -> Unit = {}
+    private val visualStickyItems: VisualStickyTreeItems
 ) : JBPanel<StickyTreePanel>() {
     private var panelWidth: Int = 0
     private var stickyContentHeight: Int = 0
@@ -34,19 +32,10 @@ class StickyTreePanel(
         layout = null
         isOpaque = false
         background = tree.background
-        addMouseListener(object : MouseAdapter() {
-            override fun mousePressed(event: MouseEvent) {
-                if (!SwingUtilities.isLeftMouseButton(event)) {
-                    return
-                }
-
-                itemAt(event.x, event.y)?.let {
-                    event.consume()
-                    onItemClick(it)
-                }
-            }
-        })
     }
+
+    override fun getToolTipText(event: MouseEvent): String? =
+        itemAt(event.x, event.y)?.let { StickyTreePathPresentation.tooltip(it.treePath) }
     
     /**
      * Repaints the sticky items based on the current state
@@ -119,14 +108,14 @@ class StickyTreePanel(
 
     internal fun stickyContentHeight(): Int = stickyContentHeight
 
-    private fun itemAt(x: Int, y: Int): StickyTreeItem? {
+    internal fun itemAt(x: Int, y: Int): StickyTreeItem? {
         if (x !in 0 until width || y !in 0 until height) {
             return null
         }
 
         val defaultRowHeight = tree.rowHeight.coerceAtLeast(1)
         for (stickyItem in visualStickyItems.items()) {
-            val rowHeight = tree.getRowBounds(stickyItem.row)?.height?.coerceAtLeast(defaultRowHeight) ?: defaultRowHeight
+            val rowHeight = tree.getPathBounds(stickyItem.treePath)?.height?.coerceAtLeast(defaultRowHeight) ?: continue
             val visibleTop = maxOf(stickyItem.yLocation, 0)
             val visibleBottom = minOf(stickyItem.yLocation + rowHeight, stickyContentHeight)
             if (y in visibleTop until visibleBottom) {
