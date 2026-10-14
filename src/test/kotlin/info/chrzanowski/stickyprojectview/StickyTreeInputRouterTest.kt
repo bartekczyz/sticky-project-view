@@ -52,6 +52,8 @@ class StickyTreeInputRouterTest {
         waitForClick()
         assertEquals(0, reveals)
         assertEquals(0, panel.mouseWheelListeners.size)
+        assertEquals(0, panel.mouseListeners.size)
+        assertEquals(0, panel.mouseMotionListeners.size)
     }
 
     @Test
@@ -207,7 +209,8 @@ class StickyTreeInputRouterTest {
 
     private fun waitForClick() {
         val loop = Toolkit.getDefaultToolkit().systemEventQueue.createSecondaryLoop()
-        Timer(700) { loop.exit() }.apply { isRepeats = false; start() }
+        val interval = (Toolkit.getDefaultToolkit().getDesktopProperty("awt.multiClickInterval") as? Int) ?: 500
+        Timer(interval + 200) { loop.exit() }.apply { isRepeats = false; start() }
         loop.enter()
     }
 }

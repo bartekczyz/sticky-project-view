@@ -342,7 +342,8 @@ class VisualStickyTreeItemsTest {
             stickyPanel.dispatchEvent(MouseEvent(stickyPanel, MouseEvent.MOUSE_RELEASED,
                 System.currentTimeMillis(), 0, 50, 25, 1, false, MouseEvent.BUTTON1))
             val loop = java.awt.Toolkit.getDefaultToolkit().systemEventQueue.createSecondaryLoop()
-            javax.swing.Timer(700) { loop.exit() }.apply { isRepeats = false; start() }
+            val interval = (java.awt.Toolkit.getDefaultToolkit().getDesktopProperty("awt.multiClickInterval") as? Int) ?: 500
+            javax.swing.Timer(interval + 200) { loop.exit() }.apply { isRepeats = false; start() }
             loop.enter()
             assertEquals("child", tree.selectionPath.lastPathComponent.toString())
             assertEquals(listOf("parent"), stickyItems.items().map(::labelOf))

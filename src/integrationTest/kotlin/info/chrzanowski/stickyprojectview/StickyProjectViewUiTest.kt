@@ -33,6 +33,8 @@ import java.nio.file.Path
 import java.awt.Rectangle
 import java.awt.Point
 import java.awt.event.KeyEvent
+import java.awt.event.MouseEvent
+import java.awt.event.MouseWheelEvent
 import java.util.UUID
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
@@ -135,6 +137,14 @@ class StickyProjectViewUiTest {
             val overlay = ui.x { byType("info.chrzanowski.stickyprojectview.StickyTreePanel") }.waitFound()
             val treeComponent = ideFrame().projectView().projectViewTree
             val nativeTree = cast(treeComponent.component, ProjectTreeRef::class)
+            fun postWheel(target: Any, point: Point) {
+                withContext(OnDispatcher.EDT) {
+                    val event = new(MouseWheelEventRef::class, target, MouseEvent.MOUSE_WHEEL,
+                        System.currentTimeMillis(), 0, point.x, point.y, 0, false,
+                        MouseWheelEvent.WHEEL_UNIT_SCROLL, 3, -3)
+                    utility(ToolkitRef::class).getDefaultToolkit().getSystemEventQueue().postEvent(event)
+                }
+            }
             fun deeperPoint(): Point {
                 val labels = stickyService.getStickyItemLabels()
                 val bounds = withContext(OnDispatcher.EDT) {
@@ -174,16 +184,14 @@ class StickyProjectViewUiTest {
                 stickyService.getStickyItemLabels().takeLast(expectedStickyItems.size) == expectedStickyItems
             }
             val beforeNativeWheel = withContext(OnDispatcher.EDT) { nativeTree.getVisibleRect().y }
-            treeComponent.moveMouse(Point(150, beforeNativeWheel + stickyService.getStickyPanelHeight() + 80))
-            ui.robot.rotateMouseWheel(-3)
+            postWheel(treeComponent.component, Point(150, beforeNativeWheel + stickyService.getStickyPanelHeight() + 80))
             waitFor("native wheel control outside the overlay", timeout = 10.seconds) {
                 withContext(OnDispatcher.EDT) { nativeTree.getVisibleRect().y } < beforeNativeWheel
             }
             assertTrue(stickyService.selectPath(TARGET_FILE_PATH.toList()))
             val beforeWheel = withContext(OnDispatcher.EDT) { nativeTree.getVisibleRect().y }
             assertTrue(beforeWheel > 0, "Wheel scenario must start in a vertically scrolled viewport")
-            overlay.moveMouse(deeperPoint())
-            ui.robot.rotateMouseWheel(-3)
+            postWheel(overlay.component, deeperPoint())
             waitFor("wheel over sticky rows scrolls the native viewport", timeout = 10.seconds) {
                 withContext(OnDispatcher.EDT) { nativeTree.getVisibleRect().y } < beforeWheel
             }
@@ -232,6 +240,20 @@ class StickyProjectViewUiTest {
     interface ProjectTreeRef {
         fun getVisibleRect(): Rectangle
         fun getRowBounds(row: Int): Rectangle
+    }
+
+    @Remote("java.awt.event.MouseWheelEvent")
+    interface MouseWheelEventRef
+
+    @Remote("java.awt.Toolkit")
+    interface ToolkitRef {
+        fun getDefaultToolkit(): ToolkitRef
+        fun getSystemEventQueue(): EventQueueRef
+    }
+
+    @Remote("java.awt.EventQueue")
+    interface EventQueueRef {
+        fun postEvent(event: MouseWheelEventRef)
     }
 
     private companion object {
