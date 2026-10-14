@@ -11,6 +11,7 @@
 - Add an IDE-wide, persistent Project View toggle for sticky rows.
 - Show full-path tooltips for sticky rows.
 - Add donation links in settings and a Project View sponsor action, plus a delayed reminder with snooze and permanent dismissal.
+- Add GitHub funding links and document GitHub Sponsors, Ko-fi, and PayPal support.
 - Include a free, sponsor-supported notice in Marketplace release notes.
 
 ### Changed
