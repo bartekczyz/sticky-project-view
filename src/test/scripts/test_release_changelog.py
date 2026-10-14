@@ -19,7 +19,10 @@ WORKFLOW = (ROOT / ".github/workflows/release.yml").read_text()
 
 
 def run(*args, cwd, **kwargs):
-    return subprocess.run(args, cwd=cwd, check=True, text=True, capture_output=True, **kwargs).stdout
+    try:
+        return subprocess.run(args, cwd=cwd, check=True, text=True, capture_output=True, **kwargs).stdout
+    except subprocess.CalledProcessError as error:
+        raise AssertionError(f"Command failed ({error.returncode}): {args}\n{error.stdout}\n{error.stderr}") from error
 
 
 def step(name):
@@ -86,7 +89,9 @@ class ReleaseChangelogTest(unittest.TestCase):
                 ("unreleased-fixture", "Use the actual plugin version", "Click-to-reveal navigation for sticky items."),
             ):
                 result = run(str(ROOT / "gradlew"), "-p", str(fixture), "--offline", "patchPluginXml",
-                             f"-Pversion={requested}", cwd=ROOT, timeout=120)
+                             f"-Pversion={requested}",
+                             f"-Porg.jetbrains.intellij.platform.intellijPlatformCache={ROOT / '.intellijPlatform'}",
+                             cwd=ROOT, timeout=120)
                 self.assertIn("BUILD SUCCESSFUL", result)
                 descriptor = ET.parse(fixture / "build/tmp/patchPluginXml/plugin.xml").getroot()
                 self.assertEqual(requested, descriptor.findtext("version"))

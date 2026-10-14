@@ -1,5 +1,4 @@
 import org.jetbrains.changelog.Changelog
-import org.jetbrains.changelog.markdownToHTML
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import java.time.Duration
 
@@ -9,6 +8,10 @@ plugins {
     id("org.jetbrains.changelog")
 }
 
+kotlin {
+    jvmToolchain(21)
+}
+
 sourceSets {
     create("integrationTest") {
         compileClasspath += sourceSets.main.get().output
@@ -16,15 +19,14 @@ sourceSets {
     }
 }
 
-val integrationTestImplementation by configurations.getting {
-    extendsFrom(configurations.testImplementation.get())
+val integrationTestImplementation = configurations.getByName("integrationTestImplementation") {
+    extendsFrom(configurations.getByName("testImplementation"))
 }
 
-val integrationTestRuntimeOnly by configurations.getting {
-    extendsFrom(configurations.testRuntimeOnly.get())
+val integrationTestRuntimeOnly = configurations.getByName("integrationTestRuntimeOnly") {
+    extendsFrom(configurations.getByName("testRuntimeOnly"))
 }
 
-// Dependencies are managed with Gradle version catalog - read more: https://docs.gradle.org/current/userguide/platforms.html#sub:version-catalog
 dependencies {
     testImplementation("junit:junit:4.13.2")
     testRuntimeOnly("org.opentest4j:opentest4j:1.3.0")
@@ -67,7 +69,7 @@ intellijPlatform {
 // Configure Gradle Changelog Plugin - read more: https://github.com/JetBrains/gradle-changelog-plugin
 changelog {
     groups.empty()
-    repositoryUrl = "https://github.com/hsz/sticky-project-view"
+    repositoryUrl = providers.gradleProperty("pluginRepositoryUrl")
 }
 
 tasks {
@@ -76,7 +78,7 @@ tasks {
     }
 }
 
-val integrationTest by intellijPlatformTesting.testIdeUi.registering {
+val integrationTest = intellijPlatformTesting.testIdeUi.register("integrationTest") {
     task {
         val integrationTestSourceSet = sourceSets.getByName("integrationTest")
         testClassesDirs = integrationTestSourceSet.output.classesDirs

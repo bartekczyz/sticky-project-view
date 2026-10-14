@@ -8,12 +8,15 @@ import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.project.ex.ProjectManagerEx
 import com.intellij.openapi.util.Disposer
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.intellij.testFramework.fixtures.impl.TempDirTestFixtureImpl
 import com.intellij.util.ui.UIUtil
 import java.nio.file.Path
 import javax.swing.JScrollPane
 import javax.swing.JTree
 
 class StickyProjectViewSettingsTest : BasePlatformTestCase() {
+    override fun createTempDirTestFixture() = TempDirTestFixtureImpl()
+
     fun testConfigurableApplyResetPublishesCombinedUpdate() {
         val settings = StickyProjectViewSettings.getInstance()
         val original = settings.preferences
