@@ -11,6 +11,15 @@ class StickyProjectViewConfigurable : BoundConfigurable(MyBundle.message("settin
 
     override fun createPanel() = panel {
         row {
+            label(MyBundle.message("settings.support"))
+        }
+        row {
+            browserLink(MyBundle.message("support.github"), StickyProjectViewSupport.GITHUB_URL)
+            browserLink(MyBundle.message("support.kofi"), StickyProjectViewSupport.KO_FI_URL)
+            browserLink(MyBundle.message("support.paypal"), StickyProjectViewSupport.PAYPAL_URL)
+        }
+        separator()
+        row {
             checkBox(MyBundle.message("settings.enabled")).bindSelected(::enabled)
         }
         row(MyBundle.message("settings.maxHeight")) {

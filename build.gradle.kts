@@ -1,4 +1,5 @@
 import org.jetbrains.changelog.Changelog
+import org.jetbrains.changelog.markdownToHTML
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import java.time.Duration
 
@@ -72,6 +73,13 @@ changelog {
 }
 
 tasks {
+    patchPluginXml {
+        val nudge = markdownToHTML(
+            "_Sticky Project View is free and sponsor-supported. If it saves you time, consider " +
+                "[♥ sponsoring it on GitHub](https://github.com/sponsors/hsz)._",
+        )
+        changeNotes = intellijPlatform.pluginConfiguration.changeNotes.map { nudge + it }
+    }
     publishPlugin {
         dependsOn(patchChangelog)
     }

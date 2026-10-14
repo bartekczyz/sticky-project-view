@@ -20,6 +20,9 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <postStartupActivity implementation="info.chrzanowski.stickyprojectview.ProjectViewStickyTreeDecorator" />
+        <postStartupActivity implementation="info.chrzanowski.stickyprojectview.SponsorNotificationActivity" />
+        <notificationGroup id="Sticky Project View" displayType="STICKY_BALLOON"
+                           bundle="messages.StickyProjectViewBundle" key="sponsor.notification.group" />
         <applicationConfigurable parentId="tools" id="StickyProjectView.Settings"
                                  instance="info.chrzanowski.stickyprojectview.StickyProjectViewConfigurable"
                                  bundle="messages.StickyProjectViewBundle" key="settings.displayName" />
@@ -30,6 +33,10 @@
             <action id="StickyProjectView.Toggle" class="info.chrzanowski.stickyprojectview.ToggleStickyProjectViewAction" />
             <action id="StickyProjectView.Configure" class="info.chrzanowski.stickyprojectview.ConfigureStickyProjectViewAction" />
             <action id="StickyProjectView.NavigateAncestors" class="info.chrzanowski.stickyprojectview.NavigateStickyAncestorAction" />
+            <separator />
+            <action id="StickyProjectView.Sponsor" class="info.chrzanowski.stickyprojectview.SponsorStickyProjectViewAction">
+                <add-to-group group-id="ProjectView.ToolWindow.SecondaryActions" anchor="last" />
+            </action>
         </group>
     </actions>
 </idea-plugin>

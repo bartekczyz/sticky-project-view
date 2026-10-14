@@ -100,6 +100,8 @@ class ReleaseChangelogTest(unittest.TestCase):
                 self.assertNotIn(absent, notes)
                 for category in ("Added", "Changed", "Fixed"):
                     self.assertIn(f"<h3>{category}</h3>", notes)
+                self.assertTrue(notes.startswith("<p><em>Sticky Project View is free and sponsor-supported."))
+                self.assertEqual(1, notes.count("https://github.com/sponsors/hsz"))
 
 
 if __name__ == "__main__":
