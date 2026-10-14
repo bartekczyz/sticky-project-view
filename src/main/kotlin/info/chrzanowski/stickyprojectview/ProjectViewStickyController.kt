@@ -59,7 +59,11 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
     fun selectPath(pathSegments: List<String>): Boolean {
         if (!isAttached()) return false
         val file = resolveFile(pathSegments) ?: return false
+        var selectionAttachment: StickyTreeAttachment? = null
+        var originalX = 0
         val callback = onEdt {
+            selectionAttachment = currentAttachment()
+            originalX = selectionAttachment?.scrollPane?.viewport?.viewPosition?.x ?: 0
             currentProjectView()?.selectCB(null, file, false) ?: ActionCallback.REJECTED
         }
         if (!callback.waitFor(SELECTION_TIMEOUT_MS)) {
@@ -68,10 +72,11 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
 
         return onEdt {
             val currentAttachment = currentAttachment() ?: return@onEdt false
+            if (currentAttachment !== selectionAttachment) return@onEdt false
             currentAttachment.tree.selectionPath
                 ?.let(currentAttachment.tree::getRowForPath)
                 ?.takeIf { it >= 0 }
-                ?.also { scrollToRow(currentAttachment, it) } != null
+                ?.also { scrollToRow(currentAttachment, it, originalX) } != null
         }
     }
 
@@ -149,11 +154,14 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
             ?.resolve(pathSegments.joinToString("/"))
             ?.let(LocalFileSystem.getInstance()::refreshAndFindFileByNioFile)
 
-    private fun scrollToRow(attachment: StickyTreeAttachment, row: Int) {
+    private fun scrollToRow(attachment: StickyTreeAttachment, row: Int, originalX: Int) {
         val rowBounds = attachment.tree.getRowBounds(row) ?: return
         val extentHeight = attachment.scrollPane.viewport.extentSize.height
         val maxY = (maxOf(attachment.tree.height, attachment.tree.preferredSize.height) - extentHeight).coerceAtLeast(0)
-        attachment.scrollPane.viewport.viewPosition = Point(0, rowBounds.y.coerceAtMost(maxY))
+        attachment.scrollPane.viewport.viewPosition = Point(
+            clampViewportX(attachment.tree, attachment.scrollPane, originalX),
+            rowBounds.y.coerceIn(0, maxY)
+        )
         attachment.manager.forceUpdate()
     }
 

@@ -113,6 +113,19 @@ class StickyProjectViewUiTest {
             val actualStickyItems = stickyService.getStickyItemLabels()
             assertEquals(expectedStickyItems, actualStickyItems.takeLast(expectedStickyItems.size))
             assertTrue(stickyService.getStickyPanelHeight() > 0)
+
+            val nextFilePath = TARGET_DIRECTORY_PATH + "DeepFile121.txt"
+            assertTrue(stickyService.selectPath(nextFilePath.toList()))
+            waitFor("sticky stack after changing selection", timeout = 30.seconds) {
+                stickyService.getSelectedPathLabels() == listOf(PROJECT_NAME) + nextFilePath &&
+                    stickyService.getStickyItemLabels().takeLast(expectedStickyItems.size) == expectedStickyItems
+            }
+            val panelHeightAfterSelection = stickyService.getStickyPanelHeight()
+            repeat(3) {
+                assertEquals(listOf(PROJECT_NAME) + nextFilePath, stickyService.getSelectedPathLabels())
+                assertEquals(expectedStickyItems, stickyService.getStickyItemLabels().takeLast(expectedStickyItems.size))
+                assertEquals(panelHeightAfterSelection, stickyService.getStickyPanelHeight())
+            }
         }
     }
 

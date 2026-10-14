@@ -38,10 +38,12 @@ class StickyTreeManager(
     private var revealedStickyItem: RevealedStickyItem? = null
     private val viewportChangeListener = ChangeListener { recalculateAndRepaint(reason = "viewport") }
     private val treeSelectionListener = TreeSelectionListener {
-        if (tree.selectionPath != revealedStickyItem?.treePath) {
+        if (revealedStickyItem != null && tree.selectionPath != revealedStickyItem?.treePath) {
             revealedStickyItem = null
+            recalculateAndRepaint(forceRecalculate = true, reason = "selectionClearedReveal")
+        } else {
+            repaintPanel("selection")
         }
-        repaintPanel("selection")
     }
     private val focusListener = object : FocusListener {
         override fun focusGained(event: FocusEvent?) {
@@ -122,16 +124,17 @@ class StickyTreeManager(
     }
 
     fun navigateTo(stickyItem: StickyTreeItem) {
+        val originalX = scrollPane.viewport.viewPosition.x
         val row = tree.getRowForPath(stickyItem.treePath).takeIf { it >= 0 } ?: return
         val rowBounds = tree.getRowBounds(row) ?: return
         val targetY = navigationTargetY(stickyItem.treePath, rowBounds, currentViewportRect())
         val previewHeight = previewStickyHeight(targetY, stickyItem.treePath)
 
-        revealedStickyItem = RevealedStickyItem(stickyItem.treePath, targetY)
         StickyTreeDebugLogger.logNavigation(tree, stickyItem, rowBounds, currentViewportRect(), targetY, previewHeight)
         tree.selectionPath = stickyItem.treePath
         tree.requestFocusInWindow()
-        scrollPane.viewport.viewPosition = Point(0, targetY)
+        revealedStickyItem = RevealedStickyItem(stickyItem.treePath, targetY)
+        scrollPane.viewport.viewPosition = Point(clampViewportX(tree, scrollPane, originalX), targetY)
         forceUpdate()
     }
 
@@ -214,4 +217,9 @@ class StickyTreeManager(
         val treePath: TreePath,
         val viewportY: Int
     )
+}
+
+internal fun clampViewportX(tree: JTree, scrollPane: JScrollPane, originalX: Int): Int {
+    val maxX = (tree.width - scrollPane.viewport.extentSize.width).coerceAtLeast(0)
+    return originalX.coerceIn(0, maxX)
 }

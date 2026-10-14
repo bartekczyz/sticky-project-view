@@ -81,6 +81,8 @@ class StickyTreePanel(
         }
 
         val defaultRowHeight = tree.rowHeight.coerceAtLeast(1)
+        val viewportX = (SwingUtilities.getAncestorOfClass(JViewport::class.java, tree) as? JViewport)
+            ?.viewPosition?.x ?: tree.visibleRect.x
         val placements = mutableListOf<String>()
         for (index in items.indices.reversed()) {
             val stickyItem = items[index]
@@ -93,7 +95,7 @@ class StickyTreePanel(
                 placements += "${StickyTreeDebugLogger.pathText(stickyItem.treePath)} skipped rowBounds=${StickyTreeDebugLogger.rect(rowBounds)} visibleTop=$visibleTop visibleBottom=$visibleBottom"
                 continue
             }
-            if (width <= 0 || rowHeight <= 0 || rowBounds.x >= width) {
+            if (width <= 0 || rowHeight <= 0 || rowBounds.x - viewportX >= width) {
                 placements += "${StickyTreeDebugLogger.pathText(stickyItem.treePath)} skipped width=$width rowHeight=$rowHeight rowBounds=${StickyTreeDebugLogger.rect(rowBounds)}"
                 continue
             }
@@ -103,7 +105,7 @@ class StickyTreePanel(
             try {
                 rowGraphics.color = tree.background
                 rowGraphics.fillRect(0, 0, width, visibleBottom - visibleTop)
-                rowGraphics.translate(0, yLocation - visibleTop - rowBounds.y)
+                rowGraphics.translate(-viewportX, yLocation - visibleTop - rowBounds.y)
                 tree.paint(rowGraphics)
             } finally {
                 rowGraphics.dispose()

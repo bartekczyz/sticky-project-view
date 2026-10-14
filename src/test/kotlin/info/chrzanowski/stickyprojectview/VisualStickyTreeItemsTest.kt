@@ -17,6 +17,92 @@ import javax.swing.tree.DefaultMutableTreeNode
 class VisualStickyTreeItemsTest {
 
     @Test
+    fun `scrolled sticky painting matches native row even beyond unscrolled viewport width`() {
+        runOnEdt {
+            val marker = Color.MAGENTA
+            val tree = object : JTree(treeNode("root", treeNode("parent", treeNode("leaf")))) {
+                override fun paintComponent(graphics: Graphics) {
+                    super.paintComponent(graphics)
+                    val bounds = getRowBounds(0)
+                    graphics.color = marker
+                    graphics.fillRect(bounds.x, bounds.y, 8, bounds.height)
+                }
+            }.applyTreeDefaults()
+            val scrollPane = JScrollPane(tree)
+            scrollPane.viewport.extentSize = java.awt.Dimension(15, 100)
+            tree.setSize(400, 200)
+            val bounds = tree.getRowBounds(0)
+            org.junit.Assert.assertTrue(bounds.x >= 15)
+            scrollPane.viewport.viewPosition = Point(bounds.x - 3, 1)
+            val items = VisualStickyTreeItems(tree)
+            items.recalculate(scrollPane.viewport.viewRect)
+            val panel = StickyTreePanel(tree, items)
+            panel.repaintStickyItems()
+            val image = BufferedImage(panel.width, panel.height, BufferedImage.TYPE_INT_RGB)
+            val graphics = image.createGraphics()
+            try {
+                panel.paint(graphics)
+            } finally {
+                graphics.dispose()
+            }
+            assertEquals(marker.rgb, image.getRGB(4, 6))
+        }
+    }
+
+    @Test
+    fun `reveal preserves horizontal position before selection handlers and clamps it`() {
+        runOnEdt {
+            for (originalX in listOf(45, 350)) {
+                val tree = createTree(treeNode("root", treeNode("parent", treeNode("child", treeNode("leaf")), treeNode("sibling"))))
+                val scrollPane = JScrollPane(tree)
+                scrollPane.viewport.extentSize = java.awt.Dimension(100, 140)
+                scrollPane.viewport.viewSize = java.awt.Dimension(400, 200)
+                scrollPane.viewport.viewPosition = Point(originalX, 21)
+                val items = VisualStickyTreeItems(tree)
+                val panel = StickyTreePanel(tree, items)
+                val manager = StickyTreeManager(tree, scrollPane, items, panel, DisposableStub())
+                try {
+                    manager.forceUpdate()
+                    val child = items.items().last()
+                    tree.addTreeSelectionListener { scrollPane.viewport.viewPosition = Point(0, 40) }
+                    manager.navigateTo(child)
+                    assertEquals(originalX.coerceAtMost(300), scrollPane.viewport.viewPosition.x)
+                    assertEquals(listOf("parent"), items.items().map(::labelOf))
+                } finally {
+                    manager.dispose()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `selection clears revealed exception and recalculates at unchanged viewport`() {
+        runOnEdt {
+            val tree = createTree(treeNode("root", treeNode("parent", treeNode("child", treeNode("leaf")), treeNode("sibling"))))
+            val scrollPane = JScrollPane(tree)
+            scrollPane.viewport.extentSize = java.awt.Dimension(200, 140)
+            val items = VisualStickyTreeItems(tree)
+            val panel = StickyTreePanel(tree, items)
+            val manager = StickyTreeManager(tree, scrollPane, items, panel, DisposableStub())
+            try {
+                scrollPane.viewport.viewPosition = Point(0, 21)
+                manager.forceUpdate()
+                manager.navigateTo(items.items().last())
+                assertEquals(listOf("parent"), items.items().map(::labelOf))
+                val position = Point(scrollPane.viewport.viewPosition)
+                tree.selectionPath = tree.getPathForRow(2)
+                assertEquals(position, scrollPane.viewport.viewPosition)
+                val expected = VisualStickyTreeItems(tree).apply { recalculate(scrollPane.viewport.viewRect) }
+                assertEquals(emptyList<String>(), expected.items().map(::labelOf))
+                assertEquals(expected.items(), items.items())
+                assertEquals(expected.height(), panel.stickyContentHeight())
+            } finally {
+                manager.dispose()
+            }
+        }
+    }
+
+    @Test
     fun `sticky rows keep full height while their subtree is still visible`() {
         runOnEdt {
             val tree = createTree(

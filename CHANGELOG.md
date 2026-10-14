@@ -4,6 +4,7 @@
 
 ## [Unreleased]
 
+- Fix horizontally scrolled sticky rows and stale rows after selection changes.
 - Run Starter/Driver UI tests against the configured IDEA 2025.3 baseline.
 
 ## [0.0.2] - 2026-04-13
