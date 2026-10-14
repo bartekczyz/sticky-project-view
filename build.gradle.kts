@@ -52,6 +52,18 @@ dependencies {
 // Configure IntelliJ Platform Gradle Plugin - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-extension.html
 intellijPlatform {
     pluginConfiguration {
+        // Keep the Marketplace description in sync with the README.
+        description = providers.fileContents(layout.projectDirectory.file("README.md")).asText.map { content ->
+            val start = "<!-- Plugin description -->"
+            val end = "<!-- Plugin description end -->"
+            val lines = content.lines()
+            val startIndex = lines.indexOf(start)
+            val endIndex = lines.indexOf(end)
+            if (lines.count { it == start } != 1 || lines.count { it == end } != 1 || endIndex <= startIndex) {
+                throw GradleException("Plugin description section must contain exactly one ordered marker pair in README.md:\n$start ... $end")
+            }
+            markdownToHTML(lines.subList(startIndex + 1, endIndex).joinToString("\n"))
+        }
         val changelog = project.changelog // local variable for configuration cache compatibility
         // Use released notes when available, otherwise the Unreleased section.
         changeNotes = providers.gradleProperty("version").map { pluginVersion ->

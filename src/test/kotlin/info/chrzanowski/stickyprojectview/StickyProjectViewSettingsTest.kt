@@ -5,6 +5,9 @@ import com.intellij.configurationStore.serialize
 import com.intellij.ide.impl.OpenProjectTask
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.WriteAction
+import com.intellij.openapi.components.RoamingType
+import com.intellij.openapi.components.SettingsCategory
+import com.intellij.openapi.components.State
 import com.intellij.openapi.project.ex.ProjectManagerEx
 import com.intellij.openapi.util.Disposer
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
@@ -16,6 +19,12 @@ import javax.swing.JTree
 
 class StickyProjectViewSettingsTest : BasePlatformTestCase() {
     override fun createTempDirTestFixture() = TempDirTestFixtureImpl()
+
+    fun testPreferencesParticipateInUiSettingsSync() {
+        val annotation = StickyProjectViewSettings::class.java.getAnnotation(State::class.java)
+        assertEquals(SettingsCategory.UI, annotation.category)
+        assertEquals(RoamingType.DEFAULT, annotation.storages.single().roamingType)
+    }
 
     fun testConfigurableApplyResetPublishesCombinedUpdate() {
         val settings = StickyProjectViewSettings.getInstance()
@@ -98,6 +107,36 @@ class StickyProjectViewSettingsTest : BasePlatformTestCase() {
         }
         settings.updatePreferences(StickyProjectViewPreferences())
         assertSize(1, snapshots)
+    }
+
+    fun testLoadedSettingsPublishNormalizedChanges() {
+        val settings = StickyProjectViewSettings.getInstance()
+        val original = settings.preferences
+        val owner = Disposer.newDisposable()
+        val snapshots = mutableListOf<StickyProjectViewPreferences>()
+        ApplicationManager.getApplication().messageBus.connect(owner).subscribe(
+            StickyProjectViewSettingsListener.TOPIC,
+            object : StickyProjectViewSettingsListener {
+                override fun settingsChanged(preferences: StickyProjectViewPreferences) {
+                    snapshots.add(preferences)
+                }
+            },
+        )
+        try {
+            settings.updatePreferences(StickyProjectViewPreferences())
+            snapshots.clear()
+            settings.loadState(StickyProjectViewPreferences(false, 200))
+            assertEquals(listOf(StickyProjectViewPreferences(false, 90)), snapshots)
+            settings.loadState(StickyProjectViewPreferences(false, 91))
+            assertSize(1, snapshots)
+            settings.loadState(StickyProjectViewPreferences(true, -1))
+            assertEquals(StickyProjectViewPreferences(true, 10), snapshots.last())
+            assertSize(2, snapshots)
+        } finally {
+            Disposer.dispose(owner)
+            settings.updatePreferences(original)
+            UIUtil.dispatchAllInvocationEvents()
+        }
     }
 
     fun testDisposedControllerCannotReattach() {

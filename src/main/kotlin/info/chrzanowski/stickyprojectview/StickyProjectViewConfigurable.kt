@@ -9,6 +9,8 @@ class StickyProjectViewConfigurable : BoundConfigurable(MyBundle.message("settin
     private var enabled = true
     private var maxStickyHeightPercent = 50
 
+    override fun getHelpTopic() = StickyProjectViewHelpProvider.HELP_TOPIC
+
     override fun createPanel() = panel {
         row {
             label(MyBundle.message("settings.support"))

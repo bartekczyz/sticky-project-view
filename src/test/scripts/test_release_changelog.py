@@ -34,6 +34,13 @@ def shell(block):
                      if line.startswith("          "))
 
 
+def copy_fixture(fixture):
+    for name in ("build.gradle.kts", "settings.gradle.kts", "gradle.properties", "CHANGELOG.md", "README.md"):
+        shutil.copy2(ROOT / name, fixture / name)
+    shutil.copytree(ROOT / "gradle", fixture / "gradle")
+    shutil.copytree(ROOT / "src/main/resources", fixture / "src/main/resources")
+
+
 class ReleaseChangelogTest(unittest.TestCase):
     def test_file_scoped_detection_and_commit(self):
         detection = step("Detect Changelog Changes")
@@ -79,10 +86,7 @@ class ReleaseChangelogTest(unittest.TestCase):
     def test_released_and_unreleased_packaged_notes(self):
         with tempfile.TemporaryDirectory(dir=ROOT / "build", prefix="release-notes-") as directory:
             fixture = Path(directory)
-            for name in ("build.gradle.kts", "settings.gradle.kts", "gradle.properties", "CHANGELOG.md"):
-                shutil.copy2(ROOT / name, fixture / name)
-            shutil.copytree(ROOT / "gradle", fixture / "gradle")
-            shutil.copytree(ROOT / "src/main/resources", fixture / "src/main/resources")
+            copy_fixture(fixture)
             version = re.search(r"^version\s*=\s*(.+)$", (fixture / "gradle.properties").read_text(), re.M).group(1)
             for requested, present, absent in (
                 (version, "Click-to-reveal navigation for sticky items.", "Use the actual plugin version"),
@@ -102,6 +106,34 @@ class ReleaseChangelogTest(unittest.TestCase):
                     self.assertIn(f"<h3>{category}</h3>", notes)
                 self.assertTrue(notes.startswith("<p><em>Sticky Project View is free and sponsor-supported."))
                 self.assertEqual(1, notes.count("https://github.com/sponsors/hsz"))
+                description = descriptor.findtext("description")
+                self.assertIn("Keeps the current directory chain visible", description)
+                for url in ("https://github.com/sponsors/hsz", "https://ko-fi.com/hszanowski", "https://paypal.me/hsz"):
+                    self.assertIn(url, description)
+                self.assertNotIn("Development", description)
+                self.assertNotIn("badge.svg", description)
+
+    def test_invalid_description_markers_fail_packaging(self):
+        start = "<!-- Plugin description -->"
+        end = "<!-- Plugin description end -->"
+        original = (ROOT / "README.md").read_text()
+        lines = original.splitlines()
+        first, last = lines.index(start), lines.index(end)
+        lines[first], lines[last] = lines[last], lines[first]
+        for name, content in (
+            ("missing-start", original.replace(start, "")),
+            ("missing-end", original.replace(end, "")),
+            ("reversed", "\n".join(lines)),
+            ("duplicate", original + "\n" + start + "\n"),
+        ):
+            with self.subTest(markers=name), tempfile.TemporaryDirectory(dir=ROOT / "build", prefix="release-description-") as directory:
+                fixture = Path(directory)
+                copy_fixture(fixture)
+                (fixture / "README.md").write_text(content)
+                with self.assertRaisesRegex(AssertionError, "Plugin description section must contain exactly one ordered marker pair"):
+                    run(str(ROOT / "gradlew"), "-p", str(fixture), "--offline", "patchPluginXml",
+                        f"-Porg.jetbrains.intellij.platform.intellijPlatformCache={ROOT / '.intellijPlatform'}",
+                        cwd=ROOT, timeout=120)
 
 
 if __name__ == "__main__":
