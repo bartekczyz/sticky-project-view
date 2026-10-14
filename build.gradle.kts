@@ -1,6 +1,7 @@
 import org.jetbrains.changelog.Changelog
 import org.jetbrains.changelog.markdownToHTML
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import java.time.Duration
 
 plugins {
     id("org.jetbrains.kotlin.jvm")
@@ -29,13 +30,15 @@ dependencies {
     integrationTestImplementation(platform("org.junit:junit-bom:5.10.3"))
     integrationTestImplementation("org.junit.jupiter:junit-jupiter")
     integrationTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.10.1")
+    // Match Starter's runtime dependency for its documented DI customization seam.
+    integrationTestImplementation("org.kodein.di:kodein-di-jvm:7.26.1")
     integrationTestRuntimeOnly("org.junit.platform:junit-platform-launcher")
     integrationTestRuntimeOnly(kotlin("reflect"))
     integrationTestRuntimeOnly(kotlin("stdlib"))
 
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {
-        intellijIdea("2025.3")
+        intellijIdea(providers.gradleProperty("platformVersion"))
 
         testFramework(TestFrameworkType.Platform)
         testFramework(TestFrameworkType.Starter, configurationName = "integrationTestImplementation")
@@ -79,33 +82,14 @@ val integrationTest by intellijPlatformTesting.testIdeUi.registering {
         classpath = integrationTestSourceSet.runtimeClasspath
 
         systemProperty("path.to.build.plugin", tasks.prepareSandbox.get().pluginDirectory.get().asFile)
+        systemProperty("platformVersion", providers.gradleProperty("platformVersion").get())
+        timeout = Duration.ofMinutes(15)
         useJUnitPlatform()
         dependsOn(tasks.prepareSandbox)
 
         testLogging {
             events("passed", "skipped", "failed")
             showStandardStreams = true
-        }
-    }
-}
-
-intellijPlatformTesting {
-    runIde {
-        register("runIdeForUiTests") {
-            task {
-                jvmArgumentProviders += CommandLineArgumentProvider {
-                    listOf(
-                        "-Drobot-server.port=8082",
-                        "-Dide.mac.message.dialogs.as.sheets=false",
-                        "-Djb.privacy.policy.text=<!--999.999-->",
-                        "-Djb.consents.confirmation.enabled=false",
-                    )
-                }
-            }
-
-            plugins {
-                robotServerPlugin()
-            }
         }
     }
 }

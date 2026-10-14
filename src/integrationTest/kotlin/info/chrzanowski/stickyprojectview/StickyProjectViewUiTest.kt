@@ -9,6 +9,8 @@ import com.intellij.driver.sdk.ui.components.common.toolwindows.projectView
 import com.intellij.driver.sdk.waitFor
 import com.intellij.driver.sdk.waitForIndicators
 import com.intellij.driver.sdk.waitForProjectOpen
+import com.intellij.ide.starter.ci.CIServer
+import com.intellij.ide.starter.di.di
 import com.intellij.ide.starter.driver.engine.runIdeWithDriver
 import com.intellij.ide.starter.ide.IdeProductProvider
 import com.intellij.ide.starter.junit5.hyphenateWithClass
@@ -19,9 +21,14 @@ import com.intellij.ide.starter.runner.CurrentTestMethod
 import com.intellij.ide.starter.runner.Starter
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import org.kodein.di.DI
+import org.kodein.di.bindSingleton
 import java.nio.file.Path
+import java.util.UUID
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
 import kotlin.time.Duration.Companion.minutes
@@ -30,6 +37,25 @@ import kotlin.time.Duration.Companion.seconds
 class StickyProjectViewUiTest {
 
     private val pluginPath = Path.of(System.getProperty("path.to.build.plugin"))
+    private val platformVersion = requireNotNull(System.getProperty("platformVersion"))
+    private val originalDi = di
+    private val ciServer = StarterJUnitCIServer()
+
+    @BeforeEach
+    fun reportIdeFailuresToJUnit() {
+        di = DI {
+            extend(originalDi)
+            bindSingleton<CIServer>(overrides = true) {
+                ciServer
+            }
+        }
+    }
+
+    @AfterEach
+    fun assertNoIdeFailures() {
+        di = originalDi
+        ciServer.assertNoFailures()
+    }
 
     @Test
     fun stickyItemsFollowExpandedProjectViewPath(@TempDir temporaryDirectory: Path) {
@@ -37,13 +63,21 @@ class StickyProjectViewUiTest {
         createProjectStructure(projectDir)
 
         Starter.newContext(
-            CurrentTestMethod.hyphenateWithClass(),
+            "${CurrentTestMethod.hyphenateWithClass()}-${UUID.randomUUID()}",
             TestCase(IdeProductProvider.IU, LocalProjectInfo(projectDir, isReusable = false))
+                .withVersion(platformVersion)
         ).apply {
             PluginConfigurator(this).installPluginFromPath(pluginPath)
-        }.runIdeWithDriver().useDriverAndCloseIde {
+        }.runIdeWithDriver(runTimeout = 8.minutes).useDriverAndCloseIde {
             waitForProjectOpen()
             waitForIndicators(5.minutes)
+
+            val applicationInfo = service<ApplicationInfoRef>()
+            val actualVersion = applicationInfo.getFullVersion()
+            val actualBuild = applicationInfo.getBuild().asString()
+            println("Starter baseline: requested=$platformVersion, actual=$actualVersion, build=$actualBuild")
+            assertEquals(platformVersion, actualVersion)
+            assertTrue(actualBuild.startsWith("IU-"), "Unexpected IDE product build: $actualBuild")
 
             ideFrame {
                 leftToolWindowToolbar.projectButton.open()
@@ -57,14 +91,17 @@ class StickyProjectViewUiTest {
                 stickyService.isAttached()
             }
 
-            val targetBecameVisible = runCatching {
-                waitFor("deep file to become selected in Project View", timeout = 30.seconds) {
-                    stickyService.selectPath(TARGET_FILE_PATH.toList())
-                }
-            }.isSuccess
             assertTrue(
-                targetBecameVisible,
+                stickyService.selectPath(TARGET_FILE_PATH.toList()),
                 "Deep file was not selected. Selected path: ${stickyService.getSelectedPathLabels()}, visible rows: ${stickyService.getVisibleRowLabels()}"
+            )
+            waitFor("exact deep file selection", timeout = 30.seconds) {
+                stickyService.getSelectedPathLabels().takeLast(TARGET_FILE_PATH.size) == TARGET_FILE_PATH.asList()
+            }
+            assertEquals(
+                listOf(PROJECT_NAME) + TARGET_FILE_PATH,
+                stickyService.getSelectedPathLabels(),
+                "Selection must identify the requested file, not merely any selected row"
             )
 
             waitFor("sticky items to match expanded directories", timeout = 30.seconds) {
@@ -104,6 +141,17 @@ class StickyProjectViewUiTest {
         fun getVisibleRowLabels(): List<String>
         fun getSelectedPathLabels(): List<String>
         fun selectPath(pathSegments: List<String>): Boolean
+    }
+
+    @Remote("com.intellij.openapi.application.ApplicationInfo")
+    interface ApplicationInfoRef {
+        fun getFullVersion(): String
+        fun getBuild(): BuildNumberRef
+    }
+
+    @Remote("com.intellij.openapi.util.BuildNumber")
+    interface BuildNumberRef {
+        fun asString(): String
     }
 
     private companion object {

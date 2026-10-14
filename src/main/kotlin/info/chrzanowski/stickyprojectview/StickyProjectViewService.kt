@@ -17,6 +17,7 @@ class StickyProjectViewService(project: Project) : Disposable {
 
     fun initialize() = controller.initialize()
 
+    // Observations must not attach a pane or refresh the sticky calculation.
     fun isAttached() = controller.isAttached()
 
     fun getStickyItemLabels() = controller.stickyItemLabels()

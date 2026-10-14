@@ -57,6 +57,7 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
     }
 
     fun selectPath(pathSegments: List<String>): Boolean {
+        if (!isAttached()) return false
         val file = resolveFile(pathSegments) ?: return false
         val callback = onEdt {
             currentProjectView()?.selectCB(null, file, false) ?: ActionCallback.REJECTED
@@ -124,7 +125,6 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
     }
 
     private fun currentAttachment(): StickyTreeAttachment? {
-        attachToPane(currentPane())
         return attachment
     }
 
