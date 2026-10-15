@@ -17,6 +17,7 @@
 
 ### Changed
 
+- Replace deprecated action-event construction in ancestor-navigation tests.
 - Run Starter/Driver UI tests against the configured IDEA 2025.3.6.1 baseline.
 - Update GitHub Actions and upload installable plugin ZIP artifacts.
 - Update Gradle to 9.8.1 and IntelliJ Platform Gradle Plugin to 2.19.0, with an explicit Java 21 toolchain.

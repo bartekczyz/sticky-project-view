@@ -2,6 +2,7 @@ package info.chrzanowski.stickyprojectview
 
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionPlaces
+import com.intellij.openapi.actionSystem.ActionUiKind
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.impl.SimpleDataContext
@@ -20,9 +21,13 @@ class StickyAncestorNavigationTest : BasePlatformTestCase() {
         assertInstanceOf(action, NavigateStickyAncestorAction::class.java)
         assertEquals(ActionUpdateThread.EDT, action.actionUpdateThread)
         assertEmpty(action.shortcutSet.shortcuts.toList())
-        val event = AnActionEvent.createFromAnAction(
-            action, null, ActionPlaces.UNKNOWN,
+        val event = AnActionEvent.createEvent(
+            action,
             SimpleDataContext.getProjectContext(project),
+            null,
+            ActionPlaces.UNKNOWN,
+            ActionUiKind.NONE,
+            null,
         )
         action.update(event)
         assertFalse(event.presentation.isEnabled)
