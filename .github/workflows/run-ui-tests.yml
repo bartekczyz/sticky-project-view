@@ -25,7 +25,11 @@ jobs:
           - os: windows-latest
             command: .\gradlew.bat integrationTest
           - os: macos-latest
-            command: ./gradlew integrationTest
+            command: |
+              osascript src/test/scripts/dismiss_macos_network_prompt.applescript &
+              prompt_watcher=$!
+              trap 'kill "$prompt_watcher" 2>/dev/null || true; wait "$prompt_watcher" 2>/dev/null || true' EXIT
+              ./gradlew integrationTest
 
     steps:
       - name: Fetch Sources

@@ -32,6 +32,7 @@ import org.kodein.di.DI
 import org.kodein.di.bindSingleton
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.awt.Rectangle
 import java.awt.Point
 import java.awt.event.KeyEvent
@@ -184,7 +185,7 @@ class StickyProjectViewUiTest {
             val nativeTreeForSettings = cast(ideFrame().projectView().projectViewTree.component, ProjectTreeRef::class)
             val chooserSelection = stickyService.getSelectedPathLabels()
             invokeAction("StickyProjectView.NavigateAncestors", now = false)
-            ui.x("//div[@text='Sticky Ancestors']").waitFound()
+            ui.x("//div[@text='Sticky Ancestors']").waitFound().click()
             ui.robot.pressAndReleaseKey(KeyEvent.VK_DOWN)
             ui.robot.pressAndReleaseKey(KeyEvent.VK_ESCAPE)
             waitFor("chooser cancellation restores tree focus", timeout = 10.seconds) {
@@ -192,7 +193,7 @@ class StickyProjectViewUiTest {
             }
             assertEquals(chooserSelection, stickyService.getSelectedPathLabels())
             invokeAction("StickyProjectView.NavigateAncestors", now = false)
-            ui.x("//div[@text='Sticky Ancestors']").waitFound()
+            ui.x("//div[@text='Sticky Ancestors']").waitFound().click()
             repeat(actualStickyItems.size) { ui.robot.pressAndReleaseKey(KeyEvent.VK_UP) }
             ui.robot.pressAndReleaseKey(KeyEvent.VK_DOWN)
             ui.robot.pressAndReleaseKey(KeyEvent.VK_ENTER)
@@ -276,8 +277,9 @@ class StickyProjectViewUiTest {
                     labels.indexOf("deeper") * bounds.height + bounds.height / 2)
             }
             overlay.moveMouse(deeperPoint())
-            ui.x("//div[contains(@text, '/src/main/kotlin/demo/nested/deeper')]").waitFound()
-                .waitAnyTextsContains(projectDir.resolve(TARGET_DIRECTORY_PATH.joinToString("/")).toString())
+            val expectedTooltipPath = projectDir.resolve(TARGET_DIRECTORY_PATH.joinToString("/")).toString()
+            ui.x("//div[contains(@text, '$expectedTooltipPath')]").waitFound()
+                .waitAnyTextsContains(expectedTooltipPath)
 
             overlay.rightClick(deeperPoint())
             val popup = ui.x { byType("javax.swing.JPopupMenu") }.waitFound()
@@ -360,7 +362,8 @@ class StickyProjectViewUiTest {
                         withContext(OnDispatcher.EDT) { tree.getRowCount() } < 10
                     }
                     val started = System.nanoTime()
-                    withContext(OnDispatcher.EDT) { utility(TreeUtilRef::class).expandAll(tree) }
+                    val expansion = withContext(OnDispatcher.EDT) { utility(TreeUtilRef::class).promiseExpandAll(tree) }
+                    expansion.blockingGet(30_000)
                     waitFor("large tree expanded with overlay enabled=$enabled", timeout = 30.seconds) {
                         withContext(OnDispatcher.EDT) { tree.getRowCount() } >= 2_600
                     }
@@ -378,7 +381,7 @@ class StickyProjectViewUiTest {
                 }
                 val initialRows = withContext(OnDispatcher.EDT) { tree.getRowCount() }
                 val changedDirectory = utility(LocalFileSystemRef::class).getInstance()
-                    .findFileByPath(deepDirectory.resolve("branch-059").toString())
+                    .findFileByPath(deepDirectory.resolve("branch-059").toString().replace('\\', '/'))
                 val addedFiles = List(200) { index ->
                     deepDirectory.resolve("branch-059/Added${index.toString().padStart(3, '0')}.txt").apply { writeText("added $index") }
                 }
@@ -431,7 +434,7 @@ class StickyProjectViewUiTest {
         val startupFailures = mutableListOf<String>()
         for (enabled in listOf(false, true)) {
             savedWorkspace?.let { Files.write(workspace, it) }
-            Starter.newContext(
+            val context = Starter.newContext(
                 "${CurrentTestMethod.hyphenateWithClass()}-$enabled-${UUID.randomUUID()}",
                 TestCase(IdeProductProvider.IU, LocalProjectInfo(projectDir, isReusable = true)).withVersion(platformVersion),
             ).apply {
@@ -468,7 +471,22 @@ class StickyProjectViewUiTest {
                     </application>
                     """.trimIndent(),
                 )
-            }.runIdeWithDriver(runTimeout = 4.minutes).useDriverAndCloseIde {
+            }
+            context.runIdeWithDriver(runTimeout = 4.minutes, launchName = "prepare-restored-startup").useDriverAndCloseIde {
+                waitForProjectOpen()
+                ideFrame { leftToolWindowToolbar.projectButton.open() }
+                waitForIndicators(2.minutes)
+                if (workload == null) {
+                    val tree = cast(ideFrame().projectView().projectViewTree.component, ProjectTreeRef::class)
+                    val expansion = withContext(OnDispatcher.EDT) { utility(TreeUtilRef::class).promiseExpandAll(tree) }
+                    expansion.blockingGet(30_000)
+                }
+            }
+            savedWorkspace?.let { Files.write(workspace, it) }
+            savedViewState?.let {
+                Files.copy(it, context.paths.configDir.resolve("workspace").resolve(it.fileName), StandardCopyOption.REPLACE_EXISTING)
+            }
+            context.runIdeWithDriver(runTimeout = 4.minutes, launchName = "restored-startup").useDriverAndCloseIde {
                 if (legacyTreeCache) {
                     assertTrue(!utility(RegistryRef::class).`is`("ide.tree.experimental.layout.cache"))
                 }
@@ -673,7 +691,12 @@ class StickyProjectViewUiTest {
 
     @Remote("com.intellij.util.ui.tree.TreeUtil")
     interface TreeUtilRef {
-        fun expandAll(tree: ProjectTreeRef)
+        fun promiseExpandAll(tree: ProjectTreeRef): PromiseRef
+    }
+
+    @Remote("org.jetbrains.concurrency.Promise")
+    interface PromiseRef {
+        fun blockingGet(timeout: Int): Any?
     }
 
     @Remote("com.intellij.openapi.vfs.LocalFileSystem")
