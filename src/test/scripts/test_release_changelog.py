@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
 
@@ -42,6 +43,7 @@ def copy_fixture(fixture):
 
 
 class ReleaseChangelogTest(unittest.TestCase):
+    @patch.dict(os.environ, GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
     def test_file_scoped_detection_and_commit(self):
         detection = step("Detect Changelog Changes")
         pull_request = step("Create Pull Request")
@@ -55,6 +57,9 @@ class ReleaseChangelogTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=ROOT / "build", prefix="release-guard-") as directory:
             repo = Path(directory)
             run("git", "init", "-q", cwd=repo)
+            run("git", "config", "--local", "user.useConfigOnly", "true", cwd=repo)
+            run("git", "config", "--local", "user.name", "Release Guard Fixture", cwd=repo)
+            run("git", "config", "--local", "user.email", "release-guard@example.invalid", cwd=repo)
             for name in ("CHANGELOG.md", "unrelated.txt"):
                 (repo / name).write_text("original\n")
             run("git", "add", "--", "CHANGELOG.md", "unrelated.txt", cwd=repo)
