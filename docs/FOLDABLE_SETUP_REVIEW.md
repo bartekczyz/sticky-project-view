@@ -28,14 +28,13 @@ Reference: `/Users/hsz/Projects/intellij-foldable-project-view`, commit `b0b315e
 - Configure repository secrets `PUBLISH_TOKEN`, `CERTIFICATE_CHAIN`, `PRIVATE_KEY`, and `PRIVATE_KEY_PASSWORD` before a signed Marketplace release. The repository secret listing was empty during this audit; no credentials were created or changed. Gradle Plugin 2.19 uses these environment variables as its signing/publishing defaults.
 - GitHub Actions must be permitted to create pull requests for the changelog update workflow. The repository currently has `default_workflow_permissions=read` and `can_approve_pull_request_reviews=false`; the owner must enable **Allow GitHub Actions to create and approve pull requests** under **Settings → Actions → General → Workflow permissions** before releasing. Repository settings were not changed. Retain Sticky's changelog-only detection/staging/commit guards, which are stricter than Foldable's release workflow.
 - Local desktop integration tests require a graphical session. Linux CI uses `xvfb-run`; Windows and macOS keep their native wrapper commands. Reports and uniquely named IDE logs are uploaded on success or failure. Native drag-and-drop transfers remain outside the existing UI test coverage.
-- Offline release fixtures reuse the main project's populated `.intellijPlatform` metadata cache and Gradle dependency cache. Run a compile/build online before running those fixtures in a fresh checkout.
 
 ## Verification
 
 - `./gradlew check buildPlugin verifyPlugin` passed: **46 unit tests**, zero failures/errors/skips, and an installable `build/distributions/sticky-project-view-0.0.2.zip`.
 - Plugin Verifier reported compatibility with all four recommended IDE builds: `IU-253.33813.55`, `IU-261.27258.48`, `IU-262.10968.63`, and `IU-263.6800.24`.
 - `./gradlew integrationTest` passed on macOS: **4 tests**, zero failures/errors/skips, including real IDEA 2025.3.6.1 launches, sticky interactions, and persistence across restart. Local verification used Java 21 and an absolute-only process `PATH`, without changing the user's shell configuration.
-- Both Python scripts passed (**6 workflow guards and 3 release/metadata tests**, including four invalid-marker cases); actionlint **1.7.12** found no workflow issues. The funding YAML and wrapper checksum were validated. GitHub-hosted jobs, Marketplace publishing, and Windows/Linux desktop runs were not executed locally.
+- actionlint **1.7.12** found no workflow issues. The funding YAML and wrapper checksum were validated. GitHub-hosted jobs, Marketplace publishing, and Windows/Linux desktop runs were not executed locally.
 
 ## Follow-ups
 

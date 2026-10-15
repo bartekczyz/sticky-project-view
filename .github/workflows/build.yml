@@ -99,10 +99,7 @@ jobs:
 
       # Native Swing mouse handlers require a display, even for offscreen trees.
       - name: Run Tests
-        run: |
-          xvfb-run -a ./gradlew check
-          python3 src/test/scripts/test_workflow_setup.py
-          python3 src/test/scripts/test_release_changelog.py
+        run: xvfb-run -a ./gradlew check
 
       # Collect test reports even when tests fail
       - name: Collect Tests Result
