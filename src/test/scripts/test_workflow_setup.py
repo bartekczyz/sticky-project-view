@@ -57,6 +57,31 @@ class WorkflowSetupTest(unittest.TestCase):
         self.assertIn("\nconcurrency:\n", WORKFLOWS["run-ui-tests"])
         self.assertIn("cancel-in-progress: true", WORKFLOWS["run-ui-tests"])
 
+    def test_ui_workflow_runs_integration_tests_on_all_platforms(self):
+        workflow = WORKFLOWS["run-ui-tests"]
+        self.assertIn("\n  workflow_dispatch:\n", workflow)
+        self.assertIn("fail-fast: false", workflow)
+        self.assertIn("run: ${{ matrix.command }}", workflow)
+        self.assertNotIn("runIdeForUiTests", workflow)
+        for os, command in (
+            ("ubuntu-latest", "xvfb-run -a ./gradlew integrationTest"),
+            ("windows-latest", r".\gradlew.bat integrationTest"),
+            ("macos-latest", "./gradlew integrationTest"),
+        ):
+            with self.subTest(os=os):
+                self.assertIn(f"- os: {os}\n", workflow)
+                entry = workflow.split(f"- os: {os}\n", 1)[1].split("\n          - os:", 1)[0].split("\n    steps:", 1)[0]
+                self.assertIn(command, entry)
+
+    def test_ui_workflow_always_uploads_reports_and_logs(self):
+        workflow = WORKFLOWS["run-ui-tests"]
+        self.assertIn("if: ${{ always() }}", workflow)
+        self.assertIn("uses: actions/upload-artifact@", workflow)
+        self.assertIn("name: ui-tests-${{ matrix.os }}", workflow)
+        for path in ("build/test-results/integrationTest/", "build/reports/tests/integrationTest/", "out/ide-tests/tests/"):
+            with self.subTest(path=path):
+                self.assertIn(path, workflow)
+
     def test_macos_ui_tests_handle_native_network_prompt_and_stop_watcher(self):
         macos = WORKFLOWS["run-ui-tests"].split("- os: macos-latest\n", 1)[1].split("\n    steps:", 1)[0]
         # Keep the handler in the workflow so a clean checkout cannot lose it.
