@@ -26,6 +26,8 @@
 
 ### Fixed
 
+- Highlight drag-and-drop targets in the sticky stack with the native Project View feedback.
+- Route drag-and-drop over sticky directories to the highlighted directory instead of the covered tree node ([#15](https://github.com/hsz/sticky-project-view/issues/15)).
 - Prevent a `NullPointerException` when initializing sticky rows before the Project View tree is ready ([#16](https://github.com/hsz/sticky-project-view/issues/16)).
 - Coalesce tree-model and expansion bursts into one deferred sticky refresh, avoiding repeated layout queries while native tree listeners are updating.
 - Keep programmatically selected files visible below the sticky stack near subtree boundaries.

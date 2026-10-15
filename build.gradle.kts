@@ -116,3 +116,11 @@ val integrationTest = intellijPlatformTesting.testIdeUi.register("integrationTes
         }
     }
 }
+
+intellijPlatformTesting {
+    runIde {
+        register("runLatest") {
+            localPath = file("/Users/hsz/Applications/IntelliJ IDEA.app")
+        }
+    }
+}

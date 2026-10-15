@@ -4,15 +4,18 @@ package info.chrzanowski.stickyprojectview
 import com.intellij.ui.ColorUtil
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBPanel
+import com.intellij.util.ui.JBUI
 import java.awt.Color
 import java.awt.Dimension
 import java.awt.GradientPaint
 import java.awt.Graphics
 import java.awt.Graphics2D
+import java.awt.Rectangle
 import java.awt.event.MouseEvent
 import javax.swing.JTree
 import javax.swing.JViewport
 import javax.swing.SwingUtilities
+import javax.swing.tree.TreePath
 import kotlin.math.roundToInt
 
 /**
@@ -27,6 +30,7 @@ class StickyTreePanel(
     private var stickyContentHeight: Int = 0
     private var panelHeight: Int = 0
     private var decoration: StackDecoration = StackDecoration.NONE
+    private var dropHighlightPath: TreePath? = null
 
     init {
         layout = null
@@ -42,6 +46,9 @@ class StickyTreePanel(
      */
     fun repaintStickyItems() {
         val items = visualStickyItems.items()
+        if (items.none { it.treePath == dropHighlightPath }) {
+            dropHighlightPath = null
+        }
         val nextWidth = currentViewportWidth()
         val nextStickyContentHeight = if (items.isEmpty()) 0 else visualStickyItems.height()
         val nextDecoration = decorationMetrics(items, nextStickyContentHeight)
@@ -96,6 +103,12 @@ class StickyTreePanel(
                 rowGraphics.fillRect(0, 0, width, visibleBottom - visibleTop)
                 rowGraphics.translate(-viewportX, yLocation - visibleTop - rowBounds.y)
                 tree.paint(rowGraphics)
+                if (stickyItem.treePath == dropHighlightPath) {
+                    rowGraphics.color = JBUI.CurrentTheme.DragAndDrop.ROW_BACKGROUND
+                    rowGraphics.fillRect(viewportX, rowBounds.y, width, rowHeight)
+                    rowGraphics.color = JBUI.CurrentTheme.DragAndDrop.BORDER_COLOR
+                    rowGraphics.drawRect(viewportX, rowBounds.y, width - 1, rowHeight - 1)
+                }
             } finally {
                 rowGraphics.dispose()
             }
@@ -107,6 +120,12 @@ class StickyTreePanel(
     override fun getPreferredSize(): Dimension = Dimension(panelWidth, panelHeight)
 
     internal fun stickyContentHeight(): Int = stickyContentHeight
+
+    internal fun setDropHighlight(path: TreePath?) {
+        if (dropHighlightPath == path) return
+        dropHighlightPath = path
+        repaint()
+    }
 
     internal fun itemAt(x: Int, y: Int): StickyTreeItem? {
         if (x !in 0 until width || y !in 0 until height) {
@@ -121,6 +140,21 @@ class StickyTreePanel(
             if (y in visibleTop until visibleBottom) {
                 return stickyItem
             }
+        }
+        return null
+    }
+
+    internal fun visibleItemBounds(item: StickyTreeItem): Rectangle? {
+        var coveredBottom = 0
+        for (stickyItem in visualStickyItems.items()) {
+            val rowHeight = tree.getPathBounds(stickyItem.treePath)?.height ?: continue
+            val bottom = stickyItem.yLocation + rowHeight
+            if (stickyItem === item) {
+                val top = maxOf(stickyItem.yLocation, coveredBottom)
+                val height = minOf(bottom, stickyContentHeight) - top
+                return if (height > 0) Rectangle(0, top, width, height) else null
+            }
+            coveredBottom = maxOf(coveredBottom, bottom)
         }
         return null
     }
@@ -182,11 +216,12 @@ class StickyTreePanel(
         } else {
             (DARK_SHADOW_ALPHA_MIN + (DARK_SHADOW_ALPHA_MAX - DARK_SHADOW_ALPHA_MIN) * strength).roundToInt()
         }
-        return Color(0, 0, 0, alpha)
+        return ColorUtil.toAlpha(SHADOW_COLOR, alpha)
     }
 
     private companion object {
-        private val SHADOW_TRANSPARENT_COLOR = Color(0, 0, 0, 0)
+        private val SHADOW_COLOR = JBColor(0x000000, 0x000000)
+        private val SHADOW_TRANSPARENT_COLOR = ColorUtil.toAlpha(SHADOW_COLOR, 0)
         private const val BORDER_HEIGHT = 1
         private const val SEPARATOR_ALPHA = 70
         private const val BASE_SHADOW_STRENGTH = 0.45f

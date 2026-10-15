@@ -182,6 +182,7 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
                 stickyManager.navigateTo(item, originalX)
             },
         )
+        Disposer.register(attachmentDisposable, StickyTreeDropTarget(tree, stickyPanel))
 
         installStickyPanel(scrollPane, stickyPanel, attachmentDisposable)
 
