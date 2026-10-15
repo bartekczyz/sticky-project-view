@@ -54,7 +54,12 @@ class WorkflowSetupTest(unittest.TestCase):
 
     def test_macos_ui_tests_handle_native_network_prompt_and_stop_watcher(self):
         macos = WORKFLOWS["run-ui-tests"].split("- os: macos-latest\n", 1)[1].split("\n    steps:", 1)[0]
-        self.assertIn("osascript src/test/scripts/dismiss_macos_network_prompt.applescript", macos)
+        # Keep the handler in the workflow so a clean checkout cannot lose it.
+        self.assertIn("osascript <<'APPLESCRIPT' &", macos)
+        self.assertIn('application processes whose name is "UserNotificationCenter"', macos)
+        self.assertIn('contains "local networks"', macos)
+        self.assertIn('name of element is "Don’t Allow" or name of element is "Don\'t Allow"', macos)
+        self.assertIn("click element", macos)
         self.assertIn("trap", macos)
         self.assertIn("EXIT", macos)
         self.assertIn('./gradlew integrationTest', macos)

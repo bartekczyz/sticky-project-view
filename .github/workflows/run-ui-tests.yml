@@ -26,7 +26,38 @@ jobs:
             command: .\gradlew.bat integrationTest
           - os: macos-latest
             command: |
-              osascript src/test/scripts/dismiss_macos_network_prompt.applescript &
+              osascript <<'APPLESCRIPT' &
+              -- Hosted macOS runners can show a native dialog that steals focus from the IDE.
+              -- Deny only local-network discovery; Starter/Driver uses loopback connections.
+              repeat 1800 times
+                  tell application "System Events"
+                      repeat with notificationProcess in (application processes whose name is "UserNotificationCenter")
+                          repeat with notificationWindow in windows of notificationProcess
+                              try
+                                  set elements to entire contents of notificationWindow
+                                  set isNetworkPrompt to false
+                                  repeat with element in elements
+                                      if role of element is "AXStaticText" then
+                                          if (value of element as text) contains "local networks" then set isNetworkPrompt to true
+                                      end if
+                                  end repeat
+                                  if isNetworkPrompt then
+                                      repeat with element in elements
+                                          if role of element is "AXButton" then
+                                              if name of element is "Don’t Allow" or name of element is "Don't Allow" then
+                                                  click element
+                                                  exit repeat
+                                              end if
+                                          end if
+                                      end repeat
+                                  end if
+                              end try
+                          end repeat
+                      end repeat
+                  end tell
+                  delay 1
+              end repeat
+              APPLESCRIPT
               prompt_watcher=$!
               trap 'kill "$prompt_watcher" 2>/dev/null || true; wait "$prompt_watcher" 2>/dev/null || true' EXIT
               ./gradlew integrationTest
