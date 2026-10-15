@@ -72,7 +72,7 @@ class StickyTreePanel(
         val defaultRowHeight = tree.rowHeight.coerceAtLeast(1)
         val viewportX = (SwingUtilities.getAncestorOfClass(JViewport::class.java, tree) as? JViewport)
             ?.viewPosition?.x ?: tree.visibleRect.x
-        val placements = mutableListOf<String>()
+        val placements = if (StickyTreeDebugLogger.isDebugEnabled) mutableListOf<String>() else null
         for (index in items.indices.reversed()) {
             val stickyItem = items[index]
             val rowBounds = tree.getRowBounds(stickyItem.row)
@@ -81,15 +81,15 @@ class StickyTreePanel(
             val visibleTop = maxOf(yLocation, 0)
             val visibleBottom = minOf(yLocation + rowHeight, stickyContentHeight)
             if (rowBounds == null || visibleTop >= visibleBottom) {
-                placements += "${StickyTreeDebugLogger.pathText(stickyItem.treePath)} skipped rowBounds=${StickyTreeDebugLogger.rect(rowBounds)} visibleTop=$visibleTop visibleBottom=$visibleBottom"
+                placements?.add("${StickyTreeDebugLogger.pathText(stickyItem.treePath)} skipped rowBounds=${StickyTreeDebugLogger.rect(rowBounds)} visibleTop=$visibleTop visibleBottom=$visibleBottom")
                 continue
             }
             if (width <= 0 || rowHeight <= 0 || rowBounds.x - viewportX >= width) {
-                placements += "${StickyTreeDebugLogger.pathText(stickyItem.treePath)} skipped width=$width rowHeight=$rowHeight rowBounds=${StickyTreeDebugLogger.rect(rowBounds)}"
+                placements?.add("${StickyTreeDebugLogger.pathText(stickyItem.treePath)} skipped width=$width rowHeight=$rowHeight rowBounds=${StickyTreeDebugLogger.rect(rowBounds)}")
                 continue
             }
 
-            placements += "${StickyTreeDebugLogger.pathText(stickyItem.treePath)} row=${stickyItem.row} y=$yLocation visibleTop=$visibleTop visibleBottom=$visibleBottom rowBounds=${StickyTreeDebugLogger.rect(rowBounds)} paintWidth=$width"
+            placements?.add("${StickyTreeDebugLogger.pathText(stickyItem.treePath)} row=${stickyItem.row} y=$yLocation visibleTop=$visibleTop visibleBottom=$visibleBottom rowBounds=${StickyTreeDebugLogger.rect(rowBounds)} paintWidth=$width")
             val rowGraphics = g.create(0, visibleTop, width, visibleBottom - visibleTop)
             try {
                 rowGraphics.color = tree.background
@@ -101,7 +101,7 @@ class StickyTreePanel(
             }
         }
         paintSeparatorAndShadow(g)
-        StickyTreeDebugLogger.logPaint(tree, width, height, items, placements)
+        StickyTreeDebugLogger.logPaint(tree, width, height, items, placements.orEmpty())
     }
 
     override fun getPreferredSize(): Dimension = Dimension(panelWidth, panelHeight)

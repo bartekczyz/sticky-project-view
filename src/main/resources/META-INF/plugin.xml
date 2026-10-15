@@ -26,9 +26,7 @@
             <action id="StickyProjectView.Configure" class="info.chrzanowski.stickyprojectview.ConfigureStickyProjectViewAction" />
             <action id="StickyProjectView.NavigateAncestors" class="info.chrzanowski.stickyprojectview.NavigateStickyAncestorAction" />
             <separator />
-            <action id="StickyProjectView.Sponsor" class="info.chrzanowski.stickyprojectview.SponsorStickyProjectViewAction">
-                <add-to-group group-id="ProjectView.ToolWindow.SecondaryActions" anchor="last" />
-            </action>
+            <action id="StickyProjectView.Sponsor" class="info.chrzanowski.stickyprojectview.SponsorStickyProjectViewAction" />
         </group>
     </actions>
 </idea-plugin>

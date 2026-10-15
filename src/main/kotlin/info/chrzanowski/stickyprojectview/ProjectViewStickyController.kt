@@ -11,14 +11,15 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.ActionCallback
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.LocalFileSystem
-import java.awt.Container
-import java.awt.LayoutManager
 import java.awt.Point
+import java.awt.event.ComponentAdapter
+import java.awt.event.ComponentEvent
+import java.beans.PropertyChangeListener
 import java.nio.file.Path
 import java.util.*
 import javax.swing.JScrollPane
 import javax.swing.JTree
-import javax.swing.ScrollPaneLayout
+import javax.swing.JViewport
 import javax.swing.SwingUtilities
 import javax.swing.tree.TreeModel
 import javax.swing.tree.TreePath
@@ -183,7 +184,7 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
             },
         )
 
-        val originalLayout = installStickyPanel(scrollPane, stickyPanel)
+        installStickyPanel(scrollPane, stickyPanel, attachmentDisposable)
 
         attachment = StickyTreeAttachment(
             tree,
@@ -192,7 +193,6 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
             visualStickyItems,
             stickyManager,
             attachmentDisposable,
-            originalLayout,
         )
         stickyManager.forceUpdate()
     }
@@ -217,16 +217,37 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
     private fun <T> withAttachment(default: T, action: StickyTreeAttachment.() -> T): T =
         onEdt { currentAttachment()?.action() ?: default }
 
-    private fun installStickyPanel(scrollPane: JScrollPane, stickyPanel: StickyTreePanel): LayoutManager {
-        val originalLayout = scrollPane.layout
+    private fun installStickyPanel(scrollPane: JScrollPane, stickyPanel: StickyTreePanel, disposable: Disposable) {
         if (stickyPanel.parent !== scrollPane) {
             scrollPane.add(stickyPanel)
             scrollPane.setComponentZOrder(stickyPanel, 0)
         }
-        scrollPane.layout = StickyTreeOverlayLayout(stickyPanel)
+
+        fun updateBounds() {
+            val bounds = scrollPane.viewport?.bounds ?: return
+            stickyPanel.setBounds(bounds.x, bounds.y, bounds.width, stickyPanel.preferredSize.height)
+        }
+
+        val boundsListener = object : ComponentAdapter() {
+            override fun componentResized(event: ComponentEvent) = updateBounds()
+            override fun componentMoved(event: ComponentEvent) = updateBounds()
+        }
+        val viewportListener = PropertyChangeListener { event ->
+            (event.oldValue as? JViewport)?.removeComponentListener(boundsListener)
+            (event.newValue as? JViewport)?.addComponentListener(boundsListener)
+            updateBounds()
+        }
+        scrollPane.viewport.addComponentListener(boundsListener)
+        stickyPanel.addComponentListener(boundsListener)
+        scrollPane.addPropertyChangeListener("viewport", viewportListener)
+        Disposer.register(disposable) {
+            scrollPane.viewport?.removeComponentListener(boundsListener)
+            stickyPanel.removeComponentListener(boundsListener)
+            scrollPane.removePropertyChangeListener("viewport", viewportListener)
+        }
+        updateBounds()
         scrollPane.revalidate()
         scrollPane.repaint()
-        return originalLayout
     }
 
     private fun resolveFile(pathSegments: List<String>) =
@@ -236,7 +257,8 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
             ?.let(LocalFileSystem.getInstance()::refreshAndFindFileByNioFile)
 
     private fun scrollToRow(attachment: StickyTreeAttachment, row: Int, originalX: Int) {
-        val rowBounds = attachment.tree.getRowBounds(row) ?: return
+        val path = attachment.tree.getPathForRow(row) ?: return
+        val rowBounds = attachment.tree.getPathBounds(path) ?: return
         val extentHeight = attachment.scrollPane.viewport.extentSize.height
         val maxY = (maxOf(attachment.tree.height, attachment.tree.preferredSize.height) - extentHeight).coerceAtLeast(0)
         attachment.scrollPane.viewport.viewPosition = Point(
@@ -244,6 +266,14 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
             rowBounds.y.coerceIn(0, maxY),
         )
         attachment.manager.forceUpdate()
+        repeat(4) {
+            val bounds = attachment.tree.getPathBounds(path) ?: return
+            val position = attachment.scrollPane.viewport.viewPosition
+            val coveredHeight = position.y + attachment.stickyPanel.preferredSize.height - bounds.y
+            if (coveredHeight <= 0 || position.y == 0) return
+            attachment.scrollPane.viewport.viewPosition = Point(position.x, (position.y - coveredHeight).coerceAtLeast(0))
+            attachment.manager.forceUpdate()
+        }
     }
 
     private fun <T> onEdt(action: () -> T): T {
@@ -265,7 +295,6 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
         val visualStickyItems: VisualStickyTreeItems,
         val manager: StickyTreeManager,
         private val disposable: Disposable,
-        private val originalLayout: LayoutManager,
     ) {
         val choices = IdentityHashMap<TreePath, TreeModel>()
 
@@ -274,26 +303,8 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
             if (stickyPanel.parent === scrollPane) {
                 scrollPane.remove(stickyPanel)
             }
-            scrollPane.layout = originalLayout
             scrollPane.revalidate()
             scrollPane.repaint()
-        }
-    }
-
-    private class StickyTreeOverlayLayout(
-        private val stickyPanel: StickyTreePanel,
-    ) : ScrollPaneLayout() {
-        override fun layoutContainer(parent: Container) {
-            super.layoutContainer(parent)
-
-            val viewportBounds = viewport?.bounds ?: return
-            val stickyHeight = stickyPanel.preferredSize.height
-            stickyPanel.setBounds(
-                viewportBounds.x,
-                viewportBounds.y,
-                viewportBounds.width,
-                stickyHeight,
-            )
         }
     }
 

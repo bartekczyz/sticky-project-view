@@ -11,6 +11,9 @@ import kotlin.math.min
 internal object StickyTreeDebugLogger {
     private val LOG = Logger.getInstance(StickyTreeDebugLogger::class.java)
 
+    val isDebugEnabled: Boolean
+        get() = LOG.isDebugEnabled
+
     fun logAttachment(tree: JTree, reason: String) {
         debug {
             "[SPV] attach reason=$reason" +

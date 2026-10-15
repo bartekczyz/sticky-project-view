@@ -2,6 +2,7 @@ package info.chrzanowski.stickyprojectview
 
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionUpdateThread
+import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.components.service
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import kotlinx.coroutines.runBlocking
@@ -36,6 +37,15 @@ class SponsorNotificationTest : BasePlatformTestCase() {
         val action = requireNotNull(ActionManager.getInstance().getAction("StickyProjectView.Sponsor"))
         assertTrue(action is SponsorStickyProjectViewAction)
         assertEquals(ActionUpdateThread.BGT, action.actionUpdateThread)
+    }
+
+    fun testSponsorActionIsNotInProjectViewOptions() {
+        val actionManager = ActionManager.getInstance()
+        val sponsor = requireNotNull(actionManager.getAction("StickyProjectView.Sponsor"))
+        val optionsMenu = actionManager.getAction("ProjectView.ToolWindow.SecondaryActions") as DefaultActionGroup
+        assertFalse(optionsMenu.getChildren(actionManager).contains(sponsor))
+        val pluginMenu = actionManager.getAction("StickyProjectView.Group") as DefaultActionGroup
+        assertContainsElements(pluginMenu.getChildren(actionManager).toList(), sponsor)
     }
 
     fun testSettingsOfferAllSupportLinks() {

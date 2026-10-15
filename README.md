@@ -40,7 +40,7 @@ The settings page's **Help** button opens these controls in the plugin documenta
 
 ## Support development
 
-Donation links are also available in **Settings → Tools → Sticky Project View**. Choose **♥ Sponsor Sticky Project View** from the Project View options menu or the **Sticky Project View** context-menu group to open GitHub Sponsors. Donations are optional; all plugin features remain free.
+Donation links are also available in **Settings → Tools → Sticky Project View**. The **Sticky Project View** context-menu group includes **♥ Sponsor Sticky Project View**, which opens GitHub Sponsors. Donations are optional; all plugin features remain free.
 
 A sponsorship reminder can appear only after at least **10 project openings with sticky rows enabled** and **14 days since first use**. Disabled sticky rows, default projects, headless runs, and unit tests do not count. **Remind me later**, or closing the reminder, snoozes it for **90 days**; **Don't show again**, or selecting a donation provider in the reminder, stops future reminders permanently. Timing and reminder choices are stored locally and are not synchronized or sent anywhere.
 

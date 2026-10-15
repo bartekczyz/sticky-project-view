@@ -105,6 +105,7 @@ val integrationTest = intellijPlatformTesting.testIdeUi.register("integrationTes
 
         systemProperty("path.to.build.plugin", tasks.prepareSandbox.get().pluginDirectory.get().asFile)
         systemProperty("platformVersion", providers.gradleProperty("platformVersion").get())
+        maxHeapSize = "2g"
         timeout = Duration.ofMinutes(15)
         useJUnitPlatform()
         dependsOn(tasks.prepareSandbox)

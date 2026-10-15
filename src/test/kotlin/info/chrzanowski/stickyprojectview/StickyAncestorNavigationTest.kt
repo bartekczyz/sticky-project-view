@@ -84,9 +84,12 @@ class StickyAncestorNavigationTest : BasePlatformTestCase() {
             tree.expandRow(0)
             tree.expandRow(1)
             pane.viewport.viewPosition = before
+            com.intellij.util.ui.UIUtil.dispatchAllInvocationEvents()
             val removed = controller.stickyAncestors().last()
             (tree.model as DefaultTreeModel).removeNodeFromParent(child)
             assertFalse(controller.navigateToStickyAncestor(removed.treePath))
+            com.intellij.util.ui.UIUtil.dispatchAllInvocationEvents()
+            assertTrue(controller.stickyAncestors().none { it.treePath == removed.treePath })
             controller.attachToTree(JTree(), JScrollPane())
             assertFalse(controller.navigateToStickyAncestor(choices.first().treePath))
             controller.applyPreferences(StickyProjectViewPreferences(false))

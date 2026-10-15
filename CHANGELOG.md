@@ -24,6 +24,10 @@
 
 ### Fixed
 
+- Coalesce tree-model and expansion bursts into one deferred sticky refresh, avoiding repeated layout queries while native tree listeners are updating.
+- Keep programmatically selected files visible below the sticky stack near subtree boundaries.
+- Avoid full descendant scans and unnecessary debug formatting when scrolling large Project View trees.
+- Keep sticky rows correctly positioned in trees with variable row heights.
 - Use the actual plugin version for packaged notes and detect release changelog changes before creating a pull request.
 - Restore sticky-overlay mouse interactions.
 - Fix horizontally scrolled sticky rows and stale rows after selection changes.

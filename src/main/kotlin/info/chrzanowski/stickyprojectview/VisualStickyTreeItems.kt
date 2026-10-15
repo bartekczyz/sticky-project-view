@@ -19,18 +19,18 @@ class VisualStickyTreeItems(private val tree: JTree) {
     fun recalculate(visibleRect: Rectangle, revealedPath: TreePath? = null, maxStickyHeightPercent: Int = 50) {
         clear()
         val contentBudget = (visibleRect.height.toLong() * maxStickyHeightPercent.coerceIn(10, 90) / 100).toInt()
-        val steps = mutableListOf<String>()
+        val steps = if (StickyTreeDebugLogger.isDebugEnabled) mutableListOf<String>() else null
 
         if (visibleRect.isEmpty || tree.rowCount == 0) {
-            steps += "stop emptyVisibleRect=${visibleRect.isEmpty} rowCount=${tree.rowCount}"
-            StickyTreeDebugLogger.logRecalculation(tree, visibleRect, stickyItems, totalHeight, steps)
+            steps?.add("stop emptyVisibleRect=${visibleRect.isEmpty} rowCount=${tree.rowCount}")
+            StickyTreeDebugLogger.logRecalculation(tree, visibleRect, stickyItems, totalHeight, steps.orEmpty())
             return
         }
 
         // No sticky items if we haven't scrolled at all
         if (visibleRect.y < 0 || visibleRect.y == 0 && revealedPath == null) {
-            steps += "stop topOfViewport y=${visibleRect.y}"
-            StickyTreeDebugLogger.logRecalculation(tree, visibleRect, stickyItems, totalHeight, steps)
+            steps?.add("stop topOfViewport y=${visibleRect.y}")
+            StickyTreeDebugLogger.logRecalculation(tree, visibleRect, stickyItems, totalHeight, steps.orEmpty())
             return
         }
 
@@ -41,30 +41,30 @@ class VisualStickyTreeItems(private val tree: JTree) {
             val lookupTop = visibleRect.y + panelHeight
             val firstVisibleRow = findTopPartiallyVisibleRow(lookupTop)
             if (firstVisibleRow < 0) {
-                steps += "stop noFirstVisibleRow lookupTop=$lookupTop"
+                steps?.add("stop noFirstVisibleRow lookupTop=$lookupTop")
                 break
             }
 
             val firstVisiblePath = tree.getPathForRow(firstVisibleRow) ?: break
             val stickyPathChain = pathToRoot(firstVisiblePath).filter(::isVisiblePath)
             if (stickyDepth >= stickyPathChain.size) {
-                steps += "stop depthOutOfChain depth=$stickyDepth chain=${stickyPathChain.joinToString(" -> ", transform = StickyTreeDebugLogger::pathText)}"
+                steps?.add("stop depthOutOfChain depth=$stickyDepth chain=${stickyPathChain.joinToString(" -> ", transform = StickyTreeDebugLogger::pathText)}")
                 break
             }
 
             val stickyPath = stickyPathChain[stickyDepth]
             if (stickyPath == revealedPath) {
-                steps += "stop revealedPath depth=$stickyDepth candidate=${StickyTreeDebugLogger.pathText(stickyPath)}"
+                steps?.add("stop revealedPath depth=$stickyDepth candidate=${StickyTreeDebugLogger.pathText(stickyPath)}")
                 break
             }
             if (!isStickyCandidate(stickyPath)) {
-                steps += "stop notStickyCandidate depth=$stickyDepth candidate=${StickyTreeDebugLogger.pathText(stickyPath)}"
+                steps?.add("stop notStickyCandidate depth=$stickyDepth candidate=${StickyTreeDebugLogger.pathText(stickyPath)}")
                 break
             }
 
             val row = tree.getRowForPath(stickyPath)
             if (row < 0) {
-                steps += "stop rowMissing candidate=${StickyTreeDebugLogger.pathText(stickyPath)}"
+                steps?.add("stop rowMissing candidate=${StickyTreeDebugLogger.pathText(stickyPath)}")
                 break
             }
 
@@ -78,7 +78,7 @@ class VisualStickyTreeItems(private val tree: JTree) {
             if ((rowBounds.y > lookupTop || rowBounds.y == lookupTop && !keepsRevealedItemBelowStack) ||
                 isPanelTooBig(rowHeight, panelHeight, contentBudget)
             ) {
-                steps += "stop rowNotAboveOrPanelTooBig depth=$stickyDepth candidate=${StickyTreeDebugLogger.pathText(stickyPath)} rowBounds=${StickyTreeDebugLogger.rect(rowBounds)} lookupTop=$lookupTop panelHeight=$panelHeight rowHeight=$rowHeight viewportHeight=${visibleRect.height}"
+                steps?.add("stop rowNotAboveOrPanelTooBig depth=$stickyDepth candidate=${StickyTreeDebugLogger.pathText(stickyPath)} rowBounds=${StickyTreeDebugLogger.rect(rowBounds)} lookupTop=$lookupTop panelHeight=$panelHeight rowHeight=$rowHeight viewportHeight=${visibleRect.height}")
                 break
             }
 
@@ -86,11 +86,11 @@ class VisualStickyTreeItems(private val tree: JTree) {
             val overlap = (lookupTop + rowHeight - subtreeBottom).coerceAtLeast(0)
             val visibleHeight = rowHeight - overlap
             if (visibleHeight <= 0) {
-                steps += "stop invisibleCandidate depth=$stickyDepth candidate=${StickyTreeDebugLogger.pathText(stickyPath)} overlap=$overlap visibleHeight=$visibleHeight subtreeBottom=$subtreeBottom"
+                steps?.add("stop invisibleCandidate depth=$stickyDepth candidate=${StickyTreeDebugLogger.pathText(stickyPath)} overlap=$overlap visibleHeight=$visibleHeight subtreeBottom=$subtreeBottom")
                 break
             }
 
-            steps += "add depth=$stickyDepth lookupTop=$lookupTop firstVisibleRow=$firstVisibleRow firstVisible=${StickyTreeDebugLogger.pathText(firstVisiblePath)} candidate=${StickyTreeDebugLogger.pathText(stickyPath)} row=$row rowBounds=${StickyTreeDebugLogger.rect(rowBounds)} subtreeBottom=$subtreeBottom overlap=$overlap visibleHeight=$visibleHeight yLocation=${panelHeight - overlap}"
+            steps?.add("add depth=$stickyDepth lookupTop=$lookupTop firstVisibleRow=$firstVisibleRow firstVisible=${StickyTreeDebugLogger.pathText(firstVisiblePath)} candidate=${StickyTreeDebugLogger.pathText(stickyPath)} row=$row rowBounds=${StickyTreeDebugLogger.rect(rowBounds)} subtreeBottom=$subtreeBottom overlap=$overlap visibleHeight=$visibleHeight yLocation=${panelHeight - overlap}")
             stickyItems.add(
                 StickyTreeItem(
                     treePath = stickyPath,
@@ -103,13 +103,13 @@ class VisualStickyTreeItems(private val tree: JTree) {
             stickyDepth += 1
 
             if (overlap > 0 || isPanelTooBig(rowHeight, panelHeight, contentBudget)) {
-                steps += "stop handoffOrPanelTooBig overlap=$overlap panelHeight=$panelHeight rowHeight=$rowHeight viewportHeight=${visibleRect.height}"
+                steps?.add("stop handoffOrPanelTooBig overlap=$overlap panelHeight=$panelHeight rowHeight=$rowHeight viewportHeight=${visibleRect.height}")
                 break
             }
         }
 
         totalHeight = panelHeight
-        StickyTreeDebugLogger.logRecalculation(tree, visibleRect, stickyItems, totalHeight, steps)
+        StickyTreeDebugLogger.logRecalculation(tree, visibleRect, stickyItems, totalHeight, steps.orEmpty())
     }
 
     /**
@@ -142,55 +142,31 @@ class VisualStickyTreeItems(private val tree: JTree) {
         }
 
         var lastRow = row
-        for (nextRow in row + 1 until tree.rowCount) {
-            val nextPath = tree.getPathForRow(nextRow) ?: break
-            if (!isDescendantOf(nextPath, path)) {
-                break
+        var upperRow = tree.rowCount - 1
+        while (lastRow < upperRow) {
+            val middleRow = lastRow + (upperRow - lastRow + 1) / 2
+            val middlePath = tree.getPathForRow(middleRow) ?: return null
+            if (isDescendantOf(middlePath, path)) {
+                lastRow = middleRow
+            } else {
+                upperRow = middleRow - 1
             }
-            lastRow = nextRow
         }
         return lastRow
     }
 
     private fun isDescendantOf(path: TreePath, ancestor: TreePath): Boolean {
-        if (path.pathCount < ancestor.pathCount) {
-            return false
-        }
-
-        val pathSegments = path.path
-        val ancestorSegments = ancestor.path
-        for (index in ancestorSegments.indices) {
-            if (pathSegments[index] != ancestorSegments[index]) {
-                return false
-            }
-        }
-
-        return true
+        return ancestor.isDescendant(path)
     }
 
     private fun findTopPartiallyVisibleRow(topY: Int): Int {
-        val rowCount = tree.rowCount
-        if (rowCount <= 0) {
+        val row = tree.getClosestRowForLocation(0, topY)
+        if (row < 0) {
             return -1
         }
 
-        val rowHeight = tree.rowHeight.coerceAtLeast(1)
-        var guess = (topY / rowHeight).coerceIn(0, rowCount - 1)
-        if (guess > 0) {
-            guess -= 1
-        }
-
-        var fallback = -1
-        for (row in guess until rowCount) {
-            val bounds = tree.getRowBounds(row) ?: continue
-            if (bounds.y + bounds.height <= topY) {
-                fallback = row
-                continue
-            }
-            return row
-        }
-
-        return if (fallback >= 0) fallback else rowCount - 1
+        val bounds = tree.getRowBounds(row) ?: return -1
+        return if (bounds.y + bounds.height <= topY) (row + 1).coerceAtMost(tree.rowCount - 1) else row
     }
 
     private fun isPanelTooBig(itemHeight: Int, panelHeight: Int, contentBudget: Int) =

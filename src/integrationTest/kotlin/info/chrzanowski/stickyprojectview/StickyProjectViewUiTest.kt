@@ -30,6 +30,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import org.kodein.di.DI
 import org.kodein.di.bindSingleton
+import java.nio.file.Files
 import java.nio.file.Path
 import java.awt.Rectangle
 import java.awt.Point
@@ -37,7 +38,15 @@ import java.awt.event.KeyEvent
 import java.awt.event.MouseEvent
 import java.awt.event.MouseWheelEvent
 import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
+import java.util.jar.JarEntry
+import java.util.jar.JarOutputStream
 import kotlin.io.path.createDirectories
+import kotlin.io.path.deleteExisting
 import kotlin.io.path.writeText
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -311,6 +320,215 @@ class StickyProjectViewUiTest {
         }
     }
 
+    @Test
+    fun largeTreeExpansionAndModelUpdates(@TempDir temporaryDirectory: Path) {
+        val projectDir = temporaryDirectory.resolve(PROJECT_NAME).createDirectories()
+        createProjectStructure(projectDir)
+        val deepDirectory = projectDir.resolve(TARGET_DIRECTORY_PATH.joinToString("/"))
+        repeat(60) { branch ->
+            val directory = deepDirectory.resolve("branch-${branch.toString().padStart(3, '0')}").createDirectories()
+            repeat(40) { file ->
+                directory.resolve("File${file.toString().padStart(3, '0')}.txt").writeText("file $file")
+            }
+        }
+        val targetPath = TARGET_DIRECTORY_PATH + arrayOf("branch-059", "File039.txt")
+        val expectedAncestors = TARGET_DIRECTORY_PATH.asList() + "branch-059"
+
+        Starter.newContext(
+            "${CurrentTestMethod.hyphenateWithClass()}-${UUID.randomUUID()}",
+            TestCase(IdeProductProvider.IU, LocalProjectInfo(projectDir, isReusable = false)).withVersion(platformVersion)
+        ).apply {
+            PluginConfigurator(this).installPluginFromPath(pluginPath)
+            seedProfilerState(paths.configDir)
+        }.runIdeWithDriver(runTimeout = 5.minutes).useDriverAndCloseIde {
+            waitForProjectOpen()
+            waitForIndicators(2.minutes)
+            assertEquals(platformVersion, service<ApplicationInfoRef>().getFullVersion())
+            ideFrame {
+                leftToolWindowToolbar.projectButton.open()
+                projectView { projectViewTree.waitFound() }
+            }
+            val sticky = service<StickyProjectViewServiceRef>(singleProject())
+            val settings = service<StickyProjectViewSettingsRef>()
+            val tree = cast(ideFrame().projectView().projectViewTree.component, ProjectTreeRef::class)
+            try {
+                for (enabled in listOf(false, true)) {
+                    settings.updatePreferences(new(StickyProjectViewPreferencesRef::class, enabled, 50))
+                    waitFor("overlay enabled=$enabled", timeout = 10.seconds) { sticky.isAttached() == enabled }
+                    withContext(OnDispatcher.EDT) { tree.collapseRow(0) }
+                    waitFor("collapsed project root", timeout = 10.seconds) {
+                        withContext(OnDispatcher.EDT) { tree.getRowCount() } < 10
+                    }
+                    val started = System.nanoTime()
+                    withContext(OnDispatcher.EDT) { utility(TreeUtilRef::class).expandAll(tree) }
+                    waitFor("large tree expanded with overlay enabled=$enabled", timeout = 30.seconds) {
+                        withContext(OnDispatcher.EDT) { tree.getRowCount() } >= 2_600
+                    }
+                    println("Large-tree expansion: overlay=$enabled, rows=${withContext(OnDispatcher.EDT) { tree.getRowCount() }}, elapsedMs=${(System.nanoTime() - started) / 1_000_000}")
+                }
+                assertTrue(sticky.selectPath(targetPath.asList()))
+                waitFor("sticky ancestors in expanded large tree", timeout = 10.seconds) {
+                    val actualAncestors = sticky.getStickyItemLabels()
+                    val selection = sticky.getSelectedPathLabels()
+                    val bounds = withContext(OnDispatcher.EDT) { tree.getRowBounds(tree.getMinSelectionRow()) }
+                    val viewport = withContext(OnDispatcher.EDT) { tree.getVisibleRect() }
+                    val stickyHeight = sticky.getStickyPanelHeight()
+                    actualAncestors.takeLast(expectedAncestors.size) == expectedAncestors &&
+                        selection == listOf(PROJECT_NAME) + targetPath && bounds.y >= viewport.y + stickyHeight
+                }
+                val initialRows = withContext(OnDispatcher.EDT) { tree.getRowCount() }
+                val changedDirectory = utility(LocalFileSystemRef::class).getInstance()
+                    .findFileByPath(deepDirectory.resolve("branch-059").toString())
+                val addedFiles = List(200) { index ->
+                    deepDirectory.resolve("branch-059/Added${index.toString().padStart(3, '0')}.txt").apply { writeText("added $index") }
+                }
+                changedDirectory.refresh(asynchronous = true, recursive = true)
+                waitFor("asynchronous model insertion burst", timeout = 30.seconds) {
+                    val actualRows = withContext(OnDispatcher.EDT) { tree.getRowCount() }
+                    val actualChildren = changedDirectory.getChildren().size
+                    actualRows == initialRows + addedFiles.size && actualChildren == 240
+                }
+                assertEquals(listOf(PROJECT_NAME) + targetPath, sticky.getSelectedPathLabels())
+                assertTrue(sticky.selectPath(targetPath.asList()))
+                waitFor("sticky rows after insertion burst", timeout = 10.seconds) {
+                    sticky.getStickyItemLabels().takeLast(expectedAncestors.size) == expectedAncestors
+                }
+                addedFiles.forEach { it.deleteExisting() }
+                changedDirectory.refresh(asynchronous = true, recursive = true)
+                waitFor("asynchronous model removal burst", timeout = 30.seconds) {
+                    withContext(OnDispatcher.EDT) { tree.getRowCount() } == initialRows && changedDirectory.getChildren().size == 40
+                }
+                assertEquals(listOf(PROJECT_NAME) + targetPath, sticky.getSelectedPathLabels())
+                assertTrue(sticky.selectPath(targetPath.asList()))
+                waitFor("sticky rows after removal burst", timeout = 10.seconds) {
+                    sticky.getStickyItemLabels().takeLast(expectedAncestors.size) == expectedAncestors
+                }
+                withContext(OnDispatcher.EDT) { tree.collapseRow(0) }
+                waitFor("collapse clears large-tree overlay", timeout = 10.seconds) {
+                    sticky.getStickyItemLabels().isEmpty() && sticky.getStickyPanelHeight() == 0
+                }
+            } finally {
+                settings.updatePreferences(new(StickyProjectViewPreferencesRef::class, true, 50))
+            }
+        }
+    }
+
+    @Test
+    fun restoredProjectStartupKeepsEdtResponsive(@TempDir temporaryDirectory: Path) {
+        val workload = System.getenv("STICKY_PERFORMANCE_PROJECT")?.takeIf(String::isNotBlank)
+        val projectDir = workload?.let(Path::of) ?: temporaryDirectory.resolve(PROJECT_NAME).createDirectories().also {
+            createProjectStructure(it)
+        }
+        if (workload != null) {
+            require(projectDir.toAbsolutePath().normalize().startsWith(Path.of(System.getProperty("user.dir"), "build"))) {
+                "The performance workload must be an isolated copy under build/"
+            }
+        }
+        val workspace = projectDir.resolve(".idea/workspace.xml")
+        val savedWorkspace = workspace.takeIf(Files::exists)?.let(Files::readAllBytes)
+        val savedViewState = System.getenv("STICKY_PERFORMANCE_WORKSPACE")?.takeIf(String::isNotBlank)?.let(Path::of)
+        val legacyTreeCache = System.getenv("STICKY_PERFORMANCE_LEGACY_TREE") == "true"
+        val startupFailures = mutableListOf<String>()
+        for (enabled in listOf(false, true)) {
+            savedWorkspace?.let { Files.write(workspace, it) }
+            Starter.newContext(
+                "${CurrentTestMethod.hyphenateWithClass()}-$enabled-${UUID.randomUUID()}",
+                TestCase(IdeProductProvider.IU, LocalProjectInfo(projectDir, isReusable = true)).withVersion(platformVersion),
+            ).apply {
+                PluginConfigurator(this).installPluginFromPath(pluginPath)
+                val probeJar = paths.pluginsDir.resolve("sticky-project-view/lib/edt-heartbeat.jar")
+                JarOutputStream(Files.newOutputStream(probeJar)).use { jar ->
+                    val name = "info/chrzanowski/stickyprojectview/EdtHeartbeat.class"
+                    jar.putNextEntry(JarEntry(name))
+                    requireNotNull(EdtHeartbeat::class.java.getResourceAsStream("/$name")).use { it.copyTo(jar) }
+                    jar.closeEntry()
+                }
+                seedProfilerState(paths.configDir)
+                if (legacyTreeCache) {
+                    paths.configDir.resolve("options/ide.general.xml").writeText(
+                        """
+                        <application>
+                          <component name="Registry">
+                            <entry key="ide.tree.experimental.layout.cache" value="false" />
+                          </component>
+                        </application>
+                        """.trimIndent(),
+                    )
+                }
+                savedViewState?.let {
+                    val stateDirectory = paths.configDir.resolve("workspace").createDirectories()
+                    Files.copy(it, stateDirectory.resolve(it.fileName))
+                }
+                paths.configDir.resolve("options/sticky-project-view.xml").writeText(
+                    """
+                    <application>
+                      <component name="StickyProjectViewSettings">
+                        <option name="enabled" value="$enabled" />
+                      </component>
+                    </application>
+                    """.trimIndent(),
+                )
+            }.runIdeWithDriver(runTimeout = 4.minutes).useDriverAndCloseIde {
+                if (legacyTreeCache) {
+                    assertTrue(!utility(RegistryRef::class).`is`("ide.tree.experimental.layout.cache"))
+                }
+                val heartbeat = new(EdtHeartbeatRef::class)
+                val captureJvmDumps = System.getenv("STICKY_PERFORMANCE_SAMPLE_JVM") == "true"
+                val processId = if (captureJvmDumps) utility(ManagementFactoryRef::class).getRuntimeMXBean().getPid() else 0L
+                check(!captureJvmDumps || processId > 0 && processId != ProcessHandle.current().pid())
+                val jcmd = Path.of(System.getProperty("java.home"), "bin/jcmd").toString()
+                val samples = CopyOnWriteArrayList<String>()
+                val sampling = AtomicBoolean(captureJvmDumps)
+                val samplingFailure = AtomicReference<Throwable>()
+                val executor = Executors.newSingleThreadExecutor()
+                val collector = executor.submit {
+                    try {
+                        while (sampling.get()) {
+                            val dump = ProcessBuilder(jcmd, processId.toString(), "Thread.print")
+                                .redirectErrorStream(true).start()
+                            val output = dump.inputStream.bufferedReader().use { it.readText() }
+                            check(dump.waitFor() == 0) { output }
+                            samples.add(output.split("\n\n").filter {
+                                it.startsWith("\"AWT-EventQueue") || it.contains("DefaultTreeLayoutCache") ||
+                                    it.contains("info.chrzanowski.stickyprojectview")
+                            }.joinToString("\n\n") { it.take(24_000) }.take(96_000))
+                            while (samples.size > 40) samples.removeAt(0)
+                            Thread.sleep(500)
+                        }
+                    } catch (failure: Throwable) {
+                        if (sampling.get()) samplingFailure.set(failure)
+                    }
+                }
+                var longestCallbackMillis = 0L
+                try {
+                    repeat(120) {
+                        assertTrue(withContext(OnDispatcher.EDT) { utility(SwingUtilitiesRef::class).isEventDispatchThread() })
+                        longestCallbackMillis = maxOf(longestCallbackMillis, heartbeat.getMaxDelayMillis())
+                        Thread.sleep(100)
+                    }
+                    waitForProjectOpen()
+                    ideFrame { leftToolWindowToolbar.projectButton.open() }
+                    assertEquals(enabled, service<StickyProjectViewSettingsRef>().getPreferences().component1())
+                    assertEquals(enabled, service<StickyProjectViewServiceRef>(singleProject()).isAttached())
+                    samplingFailure.get()?.let { throw it }
+                    println("Restored startup: overlay=$enabled, legacyCache=$legacyTreeCache, longestEdtCallbackMs=$longestCallbackMillis, samples=${samples.size}")
+                    if (longestCallbackMillis >= 1_000) {
+                        startupFailures.add("Startup blocked an EDT callback for $longestCallbackMillis ms (overlay=$enabled):\n" +
+                            samples.distinct().joinToString("\n---\n"),
+                        )
+                    }
+                } finally {
+                    heartbeat.stop()
+                    sampling.set(false)
+                    collector.cancel(true)
+                    executor.shutdownNow()
+                    assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS), "EDT sampler did not stop")
+                }
+            }
+        }
+        assertTrue(startupFailures.isEmpty(), startupFailures.joinToString("\n===\n"))
+    }
+
     private fun seedProfilerState(configDir: Path) {
         // IDEA 2025.3's first-save profiler bug creates unsupported OS configurations on macOS.
         // Use its own post-save state, including known types, rather than filtering IDE errors.
@@ -378,6 +596,32 @@ class StickyProjectViewUiTest {
         fun component2(): Int
     }
 
+    @Remote("java.lang.management.ManagementFactory")
+    interface ManagementFactoryRef {
+        fun getRuntimeMXBean(): RuntimeMXBeanRef
+    }
+
+    @Remote("java.lang.management.RuntimeMXBean")
+    interface RuntimeMXBeanRef {
+        fun getPid(): Long
+    }
+
+    @Remote("info.chrzanowski.stickyprojectview.EdtHeartbeat", plugin = "sticky-project-view")
+    interface EdtHeartbeatRef {
+        fun getMaxDelayMillis(): Long
+        fun stop()
+    }
+
+    @Remote("javax.swing.SwingUtilities")
+    interface SwingUtilitiesRef {
+        fun isEventDispatchThread(): Boolean
+    }
+
+    @Remote("com.intellij.openapi.util.registry.Registry")
+    interface RegistryRef {
+        fun `is`(key: String): Boolean
+    }
+
     @Remote("javax.swing.JSpinner")
     interface SpinnerRef {
         fun getValue(): Int
@@ -422,6 +666,26 @@ class StickyProjectViewUiTest {
         fun isFocusOwner(): Boolean
         fun getVisibleRect(): Rectangle
         fun getRowBounds(row: Int): Rectangle
+        fun getRowCount(): Int
+        fun getMinSelectionRow(): Int
+        fun collapseRow(row: Int)
+    }
+
+    @Remote("com.intellij.util.ui.tree.TreeUtil")
+    interface TreeUtilRef {
+        fun expandAll(tree: ProjectTreeRef)
+    }
+
+    @Remote("com.intellij.openapi.vfs.LocalFileSystem")
+    interface LocalFileSystemRef {
+        fun getInstance(): LocalFileSystemRef
+        fun findFileByPath(path: String): VirtualFileRef
+    }
+
+    @Remote("com.intellij.openapi.vfs.VirtualFile")
+    interface VirtualFileRef {
+        fun getChildren(): Array<VirtualFileRef>
+        fun refresh(asynchronous: Boolean, recursive: Boolean)
     }
 
     @Remote("java.awt.event.MouseWheelEvent")

@@ -1,9 +1,13 @@
 package info.chrzanowski.stickyprojectview
 
+import com.intellij.openapi.diagnostic.Logger
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.awt.Color
+import java.awt.Component
+import java.awt.Dimension
 import java.awt.Graphics
 import java.awt.Point
 import java.awt.Rectangle
@@ -13,8 +17,218 @@ import javax.swing.JScrollPane
 import javax.swing.SwingUtilities
 import javax.swing.JTree
 import javax.swing.tree.DefaultMutableTreeNode
+import javax.swing.tree.DefaultTreeCellRenderer
+import javax.swing.tree.DefaultTreeModel
+import javax.swing.tree.TreePath
 
 class VisualStickyTreeItemsTest {
+
+    @Test
+    fun `large tree scrolling keeps row lookups bounded`() {
+        runOnEdt {
+            val child = treeNode("child")
+            repeat(20_000) { child.add(treeNode("file$it")) }
+            val tree = CountingTree(treeNode("root", treeNode("parent", child), treeNode("sibling"))).applyTreeDefaults()
+            val items = VisualStickyTreeItems(tree)
+            tree.resetRowLookups()
+            val started = System.nanoTime()
+            items.recalculate(Rectangle(0, 400, 200, 200))
+            val elapsedMillis = (System.nanoTime() - started) / 1_000_000.0
+
+            assertEquals(listOf("parent", "child"), items.items().map(::labelOf))
+            assertTrue(
+                "Scrolling ${tree.rowCount} rows used ${tree.rowLookups} row lookups " +
+                    "(paths=${tree.rowPathLookups}, bounds=${tree.rowBoundsLookups}, $elapsedMillis ms)",
+                tree.rowLookups < 256,
+            )
+        }
+    }
+
+    @Test
+    fun `single ancestor scrolling keeps row lookups bounded`() {
+        runOnEdt {
+            val parent = treeNode("parent")
+            repeat(1_000) { parent.add(treeNode("file$it")) }
+            val tree = CountingTree(treeNode("root", parent)).applyTreeDefaults()
+            val items = VisualStickyTreeItems(tree)
+            tree.resetRowLookups()
+            items.recalculate(Rectangle(0, 400, 200, 200))
+
+            assertEquals(listOf("parent"), items.items().map(::labelOf))
+            assertTrue(
+                "Scrolling ${tree.rowCount} rows used ${tree.rowLookups} row lookups " +
+                    "(paths=${tree.rowPathLookups}, bounds=${tree.rowBoundsLookups})",
+                tree.rowLookups < 128,
+            )
+        }
+    }
+
+    @Test
+    fun `large tree viewport events and reveal keep row lookups bounded`() {
+        runOnEdt {
+            val child = treeNode("child")
+            repeat(20_000) { child.add(treeNode("file$it")) }
+            val tree = CountingTree(treeNode("root", treeNode("parent", child), treeNode("sibling"))).applyTreeDefaults()
+            tree.setSize(200, tree.preferredSize.height)
+            val pane = JScrollPane(tree)
+            pane.viewport.extentSize = Dimension(200, 200)
+            val items = VisualStickyTreeItems(tree)
+            val panel = StickyTreePanel(tree, items)
+            val manager = StickyTreeManager(tree, pane, items, panel, DisposableStub())
+            try {
+                manager.forceUpdate()
+                for (viewportY in listOf(1, 400, 200_000, 399_800)) {
+                    tree.resetRowLookups()
+                    pane.viewport.viewPosition = Point(0, viewportY)
+                    assertEquals(listOf("parent", "child"), items.items().map(::labelOf))
+                    assertTrue("Scrolling to $viewportY used ${tree.rowLookups} lookups", tree.rowLookups < 256)
+                }
+
+                val target = items.items().last()
+                tree.resetRowLookups()
+                manager.navigateTo(target)
+                assertEquals(target.treePath, tree.selectionPath)
+                assertEquals(listOf("parent"), items.items().map(::labelOf))
+                assertEquals(tree.getPathBounds(target.treePath).y, pane.viewport.viewPosition.y + panel.stickyContentHeight())
+                assertTrue("Reveal used ${tree.rowLookups} lookups", tree.rowLookups < 1_024)
+            } finally {
+                manager.dispose()
+            }
+        }
+    }
+
+    @Test
+    fun `variable height trees locate the correct sticky branch`() {
+        runOnEdt {
+            val first = treeNode("first")
+            repeat(100) { first.add(treeNode("file$it")) }
+            val tree = CountingTree(treeNode("root", first, treeNode("second", treeNode("leaf")))).applyTreeDefaults()
+            expandAll(tree)
+            tree.cellRenderer = VariableHeightRenderer()
+            tree.rowHeight = 0
+            val viewport = Rectangle(0, requireNotNull(tree.getRowBounds(50)).y + 1, 200, 200)
+            val items = VisualStickyTreeItems(tree)
+            tree.resetRowLookups()
+            items.recalculate(viewport)
+
+            assertEquals(listOf("first"), items.items().map(::labelOf))
+            assertEquals(requireNotNull(tree.getRowBounds(0)).height, items.height())
+            assertTrue("Used ${tree.rowLookups} row lookups", tree.rowLookups < 128)
+        }
+    }
+
+    @Test
+    fun `subtree handoff respects root visibility row heights and model changes`() {
+        runOnEdt {
+            for (rootVisible in listOf(false, true)) {
+                for (rowHeight in listOf(20, 0)) {
+                    val first = treeNode("first")
+                    val second = treeNode("second")
+                    repeat(20) {
+                        first.add(treeNode("first-file$it"))
+                        second.add(treeNode("second-file$it"))
+                    }
+                    val root = treeNode("root", first, second)
+                    val tree = createTree(root)
+                    tree.isRootVisible = rootVisible
+                    tree.cellRenderer = VariableHeightRenderer()
+                    tree.rowHeight = rowHeight
+                    expandAll(tree)
+                    val prefix = if (rootVisible) listOf("root") else emptyList()
+                    val prefixHeight = if (rootVisible) tree.getPathBounds(TreePath(root.path)).height else 0
+                    val firstHeight = tree.getPathBounds(TreePath(first.path)).height
+                    val lastLeaf = first.lastLeaf
+                    val lastBounds = tree.getPathBounds(TreePath(lastLeaf.path))
+                    val subtreeBottom = lastBounds.y + lastBounds.height
+                    val remainingHeight = firstHeight / 2
+                    val viewport = Rectangle(0, subtreeBottom - prefixHeight - remainingHeight, 200, 400)
+                    val items = VisualStickyTreeItems(tree)
+
+                    items.recalculate(viewport)
+                    assertEquals(prefix + "first", items.items().map(::labelOf))
+                    assertEquals(prefixHeight + remainingHeight, items.height())
+                    assertEquals(prefixHeight - firstHeight + remainingHeight, items.items().last().yLocation)
+
+                    val model = tree.model as DefaultTreeModel
+                    model.removeNodeFromParent(lastLeaf)
+                    items.recalculate(viewport)
+                    assertEquals(prefix + "second", items.items().map(::labelOf))
+                    model.insertNodeInto(lastLeaf, first, first.childCount)
+                    items.recalculate(viewport)
+                    assertEquals(prefix + "first", items.items().map(::labelOf))
+                    assertEquals(
+                        "rootVisible=$rootVisible rowHeight=$rowHeight before=$lastBounds " +
+                            "after=${tree.getPathBounds(TreePath(lastLeaf.path))}",
+                        prefixHeight + remainingHeight,
+                        items.height(),
+                    )
+
+                    viewport.y = subtreeBottom - prefixHeight
+                    items.recalculate(viewport)
+                    assertEquals(prefix, items.items().map(::labelOf))
+                    assertEquals(prefixHeight, items.height())
+                    viewport.y = 0
+                    items.recalculate(viewport)
+                    assertTrue(items.items().isEmpty())
+                    assertEquals(0, items.height())
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `calculation only formats sticky paths for debug logging`() {
+        runOnEdt {
+            val parentLabel = CountingLabel("parent")
+            val parent = DefaultMutableTreeNode(parentLabel)
+            repeat(20) { parent.add(treeNode("file$it")) }
+            val tree = createTree(treeNode("root", parent))
+            val items = VisualStickyTreeItems(tree)
+            val debugEnabled = Logger.getInstance(StickyTreeDebugLogger::class.java).isDebugEnabled
+            parentLabel.calls = 0
+            items.recalculate(Rectangle(0, 21, 200, 200))
+
+            assertEquals(1, items.items().size)
+            if (debugEnabled) {
+                assertTrue(parentLabel.calls > 0)
+            } else {
+                assertEquals(0, parentLabel.calls)
+            }
+        }
+    }
+
+    @Test
+    fun `painting only adds path diagnostics for debug logging`() {
+        runOnEdt {
+            val parentLabel = CountingLabel("parent")
+            val parent = DefaultMutableTreeNode(parentLabel)
+            repeat(20) { parent.add(treeNode("file$it")) }
+            val tree = createTree(treeNode("root", parent))
+            val items = VisualStickyTreeItems(tree)
+            items.recalculate(Rectangle(0, 21, 200, 200))
+            val panel = StickyTreePanel(tree, items)
+            panel.repaintStickyItems()
+            val debugEnabled = Logger.getInstance(StickyTreeDebugLogger::class.java).isDebugEnabled
+            val graphics = BufferedImage(tree.width, tree.height, BufferedImage.TYPE_INT_RGB).createGraphics()
+            try {
+                graphics.clip = Rectangle(0, 0, tree.width, tree.getRowBounds(0).height)
+                parentLabel.calls = 0
+                tree.paint(graphics)
+                val nativeCalls = parentLabel.calls
+
+                graphics.clip = null
+                parentLabel.calls = 0
+                panel.paint(graphics)
+                if (debugEnabled) {
+                    assertTrue(parentLabel.calls > nativeCalls)
+                } else {
+                    assertEquals(nativeCalls, parentLabel.calls)
+                }
+            } finally {
+                graphics.dispose()
+            }
+        }
+    }
 
     @Test
     fun `height percentage retains row margin across tiny odd and resized viewports`() {
@@ -211,6 +425,8 @@ class VisualStickyTreeItemsTest {
 
     @Test
     fun `manager recalculates after collapse without scrolling`() {
+        lateinit var stickyPanel: StickyTreePanel
+        lateinit var manager: StickyTreeManager
         runOnEdt {
             val tree = createTree(
                 treeNode("root",
@@ -226,17 +442,19 @@ class VisualStickyTreeItemsTest {
                 doLayout()
                 viewport.viewPosition = java.awt.Point(0, 21)
             }
-            val stickyPanel = StickyTreePanel(tree, stickyItems)
-            val manager = StickyTreeManager(tree, scrollPane, stickyItems, stickyPanel, DisposableStub())
+            stickyPanel = StickyTreePanel(tree, stickyItems)
+            manager = StickyTreeManager(tree, scrollPane, stickyItems, stickyPanel, DisposableStub())
 
             manager.forceUpdate()
             assertEquals(19, stickyPanel.stickyContentHeight())
             assertNotEquals(stickyPanel.stickyContentHeight(), stickyPanel.preferredSize.height)
 
             tree.collapseRow(0)
-
-            assertEquals(0, stickyPanel.preferredSize.height)
-            manager.dispose()
+        }
+        try {
+            runOnEdt { assertEquals(0, stickyPanel.preferredSize.height) }
+        } finally {
+            runOnEdt { manager.dispose() }
         }
     }
 
@@ -486,6 +704,55 @@ class VisualStickyTreeItemsTest {
 
     private class DisposableStub : com.intellij.openapi.Disposable {
         override fun dispose() = Unit
+    }
+
+    private class CountingLabel(private val text: String) {
+        var calls = 0
+
+        override fun toString(): String {
+            calls++
+            return text
+        }
+    }
+
+    private class CountingTree(root: DefaultMutableTreeNode) : JTree(root) {
+        var rowLookups = 0
+        var rowPathLookups = 0
+        var rowBoundsLookups = 0
+
+        fun resetRowLookups() {
+            rowLookups = 0
+            rowPathLookups = 0
+            rowBoundsLookups = 0
+        }
+
+        override fun getPathForRow(row: Int): TreePath? {
+            rowLookups++
+            rowPathLookups++
+            return super.getPathForRow(row)
+        }
+
+        override fun getRowBounds(row: Int): Rectangle? {
+            rowLookups++
+            rowBoundsLookups++
+            return super.getRowBounds(row)
+        }
+    }
+
+    private class VariableHeightRenderer : DefaultTreeCellRenderer() {
+        override fun getTreeCellRendererComponent(
+            tree: JTree,
+            value: Any?,
+            selected: Boolean,
+            expanded: Boolean,
+            leaf: Boolean,
+            row: Int,
+            hasFocus: Boolean,
+        ): Component {
+            val component = super.getTreeCellRendererComponent(tree, value, selected, expanded, leaf, row, hasFocus)
+            component.preferredSize = Dimension(180, if (value.toString().length % 2 == 0) 18 else 30)
+            return component
+        }
     }
 
     private class MarkerTree(
