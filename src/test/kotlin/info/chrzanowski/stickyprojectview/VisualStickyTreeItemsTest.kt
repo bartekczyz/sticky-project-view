@@ -1,6 +1,7 @@
 package info.chrzanowski.stickyprojectview
 
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.ui.tree.ui.DefaultTreeUI
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -130,10 +131,12 @@ class VisualStickyTreeItemsTest {
                     }
                     val root = treeNode("root", first, second)
                     val tree = createTree(root)
+                    tree.setUI(DefaultTreeUI())
                     tree.isRootVisible = rootVisible
                     tree.cellRenderer = VariableHeightRenderer()
                     tree.rowHeight = rowHeight
                     expandAll(tree)
+                    measureRows(tree)
                     val prefix = if (rootVisible) listOf("root") else emptyList()
                     val prefixHeight = if (rootVisible) tree.getPathBounds(TreePath(root.path)).height else 0
                     val firstHeight = tree.getPathBounds(TreePath(first.path)).height
@@ -151,9 +154,12 @@ class VisualStickyTreeItemsTest {
 
                     val model = tree.model as DefaultTreeModel
                     model.removeNodeFromParent(lastLeaf)
+                    measureRows(tree)
                     items.recalculate(viewport)
                     assertEquals(prefix + "second", items.items().map(::labelOf))
                     model.insertNodeInto(lastLeaf, first, first.childCount)
+                    measureRows(tree)
+                    assertEquals(lastBounds, tree.getPathBounds(TreePath(lastLeaf.path)))
                     items.recalculate(viewport)
                     assertEquals(prefix + "first", items.items().map(::labelOf))
                     assertEquals(
@@ -699,6 +705,12 @@ class VisualStickyTreeItemsTest {
         while (row < tree.rowCount) {
             tree.expandRow(row)
             row++
+        }
+    }
+
+    private fun measureRows(tree: JTree) {
+        for (row in 0 until tree.rowCount) {
+            requireNotNull(tree.getRowBounds(row))
         }
     }
 
