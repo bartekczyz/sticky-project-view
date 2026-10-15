@@ -21,6 +21,7 @@ class StickyAncestorNavigationTest : BasePlatformTestCase() {
         assertInstanceOf(action, NavigateStickyAncestorAction::class.java)
         assertEquals(ActionUpdateThread.EDT, action.actionUpdateThread)
         assertEmpty(action.shortcutSet.shortcuts.toList())
+        val templateEnabled = action.templatePresentation.isEnabled
         val event = AnActionEvent.createEvent(
             action,
             SimpleDataContext.getProjectContext(project),
@@ -29,14 +30,18 @@ class StickyAncestorNavigationTest : BasePlatformTestCase() {
             ActionUiKind.NONE,
             null,
         )
+        assertSame(project, event.project)
+        assertNotSame(action.templatePresentation, event.presentation)
         action.update(event)
         assertFalse(event.presentation.isEnabled)
+        assertEquals(templateEnabled, action.templatePresentation.isEnabled)
         val settings = StickyProjectViewSettings.getInstance()
         val original = settings.preferences
         try {
             settings.updatePreferences(original.copy(enabled = false))
             action.update(event)
             assertFalse(event.presentation.isEnabled)
+            assertEquals(templateEnabled, action.templatePresentation.isEnabled)
             action.actionPerformed(event)
         } finally {
             settings.updatePreferences(original)

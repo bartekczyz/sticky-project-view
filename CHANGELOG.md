@@ -17,6 +17,7 @@
 
 ### Changed
 
+- Guard ancestor action tests against lost project context and shared presentation state.
 - Replace deprecated action-event construction in ancestor-navigation tests.
 - Run Starter/Driver UI tests against the configured IDEA 2025.3.6.1 baseline.
 - Update GitHub Actions and upload installable plugin ZIP artifacts.
