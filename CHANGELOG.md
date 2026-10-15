@@ -56,3 +56,7 @@
 
 - Initial Sticky Project View implementation.
 - Sticky parent directories for expanded Project View nodes while scrolling.
+
+[Unreleased]: https://github.com/hsz/sticky-project-view/compare/v0.0.2...HEAD
+[0.0.2]: https://github.com/hsz/sticky-project-view/compare/v0.0.1...v0.0.2
+[0.0.1]: https://github.com/hsz/sticky-project-view/commits/v0.0.1
