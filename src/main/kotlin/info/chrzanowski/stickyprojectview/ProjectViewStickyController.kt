@@ -47,7 +47,6 @@ class ProjectViewStickyController(private val project: Project) : Disposable {
         if (disposed || project.isDisposed) return@onEdt
         initialized = true
         currentPane()?.let {
-            StickyTreeDebugLogger.logAttachment(it.tree, "initialize")
             attachToPane(it)
         }
     }

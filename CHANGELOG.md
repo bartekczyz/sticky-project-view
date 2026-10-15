@@ -26,6 +26,7 @@
 
 ### Fixed
 
+- Prevent a `NullPointerException` when initializing sticky rows before the Project View tree is ready ([#16](https://github.com/hsz/sticky-project-view/issues/16)).
 - Coalesce tree-model and expansion bursts into one deferred sticky refresh, avoiding repeated layout queries while native tree listeners are updating.
 - Keep programmatically selected files visible below the sticky stack near subtree boundaries.
 - Avoid full descendant scans and unnecessary debug formatting when scrolling large Project View trees.
