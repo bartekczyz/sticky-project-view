@@ -1,0 +1,83 @@
+# Starter launches and closes the IDE; no separate Robot server is needed.
+name: Run UI Tests
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: UI Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            command: xvfb-run -a ./gradlew integrationTest
+          - os: windows-latest
+            command: .\gradlew.bat integrationTest
+          - os: macos-latest
+            command: |
+              osascript <<'APPLESCRIPT' &
+              repeat
+                tell application "System Events"
+                  repeat with notificationProcess in (application processes whose name is "UserNotificationCenter")
+                    try
+                      repeat with notificationWindow in windows of notificationProcess
+                        set notificationElements to entire contents of notificationWindow
+                        set networkPrompt to false
+                        repeat with element in notificationElements
+                          try
+                            if value of element contains "local networks" then set networkPrompt to true
+                          end try
+                        end repeat
+                        if networkPrompt then
+                          repeat with element in notificationElements
+                            try
+                              if name of element is "Don’t Allow" or name of element is "Don't Allow" then click element
+                            end try
+                          end repeat
+                        end if
+                      end repeat
+                    end try
+                  end repeat
+                end tell
+                delay 1
+              end repeat
+              APPLESCRIPT
+              prompt_watcher=$!
+              trap 'kill "$prompt_watcher" 2>/dev/null || true' EXIT
+              ./gradlew integrationTest
+
+    steps:
+      - name: Fetch Sources
+        uses: actions/checkout@v7
+
+      - name: Setup Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: zulu
+          java-version: 21
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Run UI Tests
+        run: ${{ matrix.command }}
+
+      - name: Collect UI Test Results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-tests-${{ matrix.os }}
+          path: |
+            build/test-results/integrationTest/
+            build/reports/tests/integrationTest/
+            out/ide-tests/tests/
