@@ -97,10 +97,10 @@ jobs:
         with:
           cache-read-only: true
 
-      # Run tests
+      # Native Swing mouse handlers require a display, even for offscreen trees.
       - name: Run Tests
         run: |
-          ./gradlew check
+          xvfb-run -a ./gradlew check
           python3 src/test/scripts/test_workflow_setup.py
           python3 src/test/scripts/test_release_changelog.py
 

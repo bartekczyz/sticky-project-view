@@ -48,6 +48,11 @@ class WorkflowSetupTest(unittest.TestCase):
         if "codecov/codecov-action@" in WORKFLOWS["build"]:
             self.assertIn("org.jetbrains.kotlinx.kover", (ROOT / "build.gradle.kts").read_text())
 
+    def test_linux_swing_tests_run_with_a_virtual_display(self):
+        test_job = dict(jobs(WORKFLOWS["build"]))["test"]
+        self.assertIn("runs-on: ubuntu-latest", test_job)
+        self.assertIn("xvfb-run -a ./gradlew check", test_job)
+
     def test_ui_workflow_cancels_superseded_runs(self):
         self.assertIn("\nconcurrency:\n", WORKFLOWS["run-ui-tests"])
         self.assertIn("cancel-in-progress: true", WORKFLOWS["run-ui-tests"])
