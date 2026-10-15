@@ -1,8 +1,12 @@
 package info.chrzanowski.stickyprojectview
 
+import com.intellij.driver.client.Driver
 import com.intellij.driver.client.Remote
 import com.intellij.driver.client.service
 import com.intellij.driver.model.OnDispatcher
+import com.intellij.driver.sdk.closeToolWindow
+import com.intellij.driver.sdk.getToolWindow
+import com.intellij.driver.sdk.openToolWindow
 import com.intellij.driver.sdk.singleProject
 import com.intellij.driver.sdk.invokeAction
 import com.intellij.driver.sdk.ui.components.UiComponent.Companion.waitFound
@@ -417,6 +421,29 @@ class StickyProjectViewUiTest {
     }
 
     @Test
+    fun projectViewPreparationIsIdempotent(@TempDir temporaryDirectory: Path) {
+        val projectDir = temporaryDirectory.resolve(PROJECT_NAME).createDirectories()
+        createProjectStructure(projectDir)
+        Starter.newContext(
+            "${CurrentTestMethod.hyphenateWithClass()}-${UUID.randomUUID()}",
+            TestCase(IdeProductProvider.IU, LocalProjectInfo(projectDir, isReusable = true)).withVersion(platformVersion),
+        ).apply {
+            PluginConfigurator(this).installPluginFromPath(pluginPath)
+            seedProfilerState(paths.configDir)
+        }.runIdeWithDriver(runTimeout = 3.minutes).useDriverAndCloseIde {
+            waitForProjectOpen()
+            waitForIndicators(2.minutes)
+            closeToolWindow("Project")
+            assertTrue(withContext(OnDispatcher.EDT) { !getToolWindow("Project").isVisible() })
+
+            showProjectView()
+            assertTrue(withContext(OnDispatcher.EDT) { getToolWindow("Project").isVisible() })
+            showProjectView()
+            assertTrue(withContext(OnDispatcher.EDT) { getToolWindow("Project").isVisible() })
+        }
+    }
+
+    @Test
     fun restoredProjectStartupKeepsEdtResponsive(@TempDir temporaryDirectory: Path) {
         val workload = System.getenv("STICKY_PERFORMANCE_PROJECT")?.takeIf(String::isNotBlank)
         val projectDir = workload?.let(Path::of) ?: temporaryDirectory.resolve(PROJECT_NAME).createDirectories().also {
@@ -474,8 +501,8 @@ class StickyProjectViewUiTest {
             }
             context.runIdeWithDriver(runTimeout = 4.minutes, launchName = "prepare-restored-startup").useDriverAndCloseIde {
                 waitForProjectOpen()
-                ideFrame { leftToolWindowToolbar.projectButton.open() }
                 waitForIndicators(2.minutes)
+                showProjectView()
                 if (workload == null) {
                     val tree = cast(ideFrame().projectView().projectViewTree.component, ProjectTreeRef::class)
                     val expansion = withContext(OnDispatcher.EDT) { utility(TreeUtilRef::class).promiseExpandAll(tree) }
@@ -525,7 +552,7 @@ class StickyProjectViewUiTest {
                         Thread.sleep(100)
                     }
                     waitForProjectOpen()
-                    ideFrame { leftToolWindowToolbar.projectButton.open() }
+                    showProjectView()
                     assertEquals(enabled, service<StickyProjectViewSettingsRef>().getPreferences().component1())
                     assertEquals(enabled, service<StickyProjectViewServiceRef>(singleProject()).isAttached())
                     samplingFailure.get()?.let { throw it }
@@ -545,6 +572,12 @@ class StickyProjectViewUiTest {
             }
         }
         assertTrue(startupFailures.isEmpty(), startupFailures.joinToString("\n===\n"))
+    }
+
+    private fun Driver.showProjectView() {
+        // Activation actions can race startup focus changes and toggle the window closed.
+        openToolWindow("Project")
+        ideFrame().projectView().projectViewTree.waitFound()
     }
 
     private fun seedProfilerState(configDir: Path) {
