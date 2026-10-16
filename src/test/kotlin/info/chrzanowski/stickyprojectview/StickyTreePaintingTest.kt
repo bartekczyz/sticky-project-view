@@ -2,7 +2,6 @@ package info.chrzanowski.stickyprojectview
 
 import com.intellij.openapi.util.registry.Registry
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
-import com.intellij.ui.ExperimentalUI
 import com.intellij.ui.tree.ui.DefaultTreeUI
 import com.intellij.ui.treeStructure.Tree
 import java.awt.Color
@@ -39,7 +38,6 @@ class StickyTreePaintingTest : BasePlatformTestCase() {
         Registry.get("ide.experimental.ui").setValue(true, testRootDisposable)
         Registry.get("ide.experimental.ui.tree.selection").setValue(true, testRootDisposable)
         Registry.get("ide.file.colors.at.left").setValue(false, testRootDisposable)
-        assertTrue("The test requires inset tree selection", ExperimentalUI.isNewUI())
         val parent = DefaultMutableTreeNode("parent").apply {
             add(DefaultMutableTreeNode("child").apply {
                 repeat(20) { add(DefaultMutableTreeNode("file$it")) }
@@ -77,6 +75,9 @@ class StickyTreePaintingTest : BasePlatformTestCase() {
         }
         val expectedBackground = if (fileColorsEnabled) fileColor ?: tree.background else tree.background
         assertEquals("The native row must have the expected background", expectedBackground.rgb, nativeImage.getRGB(tree.width - 1, 10))
+        if (selected) {
+            assertTrue("The native row must render inset selection", nativeImage.getRGB(tree.width / 2, 10) != expectedBackground.rgb)
+        }
         val items = VisualStickyTreeItems(tree)
         val panel = StickyTreePanel(tree, items)
 

@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add toggle action to project view toolbar
+
 ### Fixed
 
 - Preserve source and excluded directory backgrounds around selected sticky rows.
