@@ -4,6 +4,7 @@ package info.chrzanowski.stickyprojectview
 import com.intellij.ui.ColorUtil
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBPanel
+import com.intellij.ui.tree.TreePathBackgroundSupplier
 import com.intellij.util.ui.JBUI
 import java.awt.Color
 import java.awt.Dimension
@@ -99,10 +100,16 @@ class StickyTreePanel(
             placements?.add("${StickyTreeDebugLogger.pathText(stickyItem.treePath)} row=${stickyItem.row} y=$yLocation visibleTop=$visibleTop visibleBottom=$visibleBottom rowBounds=${StickyTreeDebugLogger.rect(rowBounds)} paintWidth=$width")
             val rowGraphics = g.create(0, visibleTop, width, visibleBottom - visibleTop)
             try {
-                rowGraphics.color = tree.background
+                val pathBackground = (tree as? TreePathBackgroundSupplier)?.getPathBackground(stickyItem.treePath, stickyItem.row)
+                rowGraphics.color = pathBackground ?: tree.background
                 rowGraphics.fillRect(0, 0, width, visibleBottom - visibleTop)
                 rowGraphics.translate(-viewportX, yLocation - visibleTop - rowBounds.y)
-                tree.paint(rowGraphics)
+                if (pathBackground != null) {
+                    // Native file-color painting only visits rows inside the tree's viewport.
+                    tree.ui.paint(rowGraphics, tree)
+                } else {
+                    tree.paint(rowGraphics)
+                }
                 if (stickyItem.treePath == dropHighlightPath) {
                     rowGraphics.color = JBUI.CurrentTheme.DragAndDrop.ROW_BACKGROUND
                     rowGraphics.fillRect(viewportX, rowBounds.y, width, rowHeight)
